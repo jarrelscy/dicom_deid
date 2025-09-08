@@ -5,7 +5,7 @@
 
 // Import required libraries
 // Use the current origin to build absolute URLs
-const baseUrl = self.location.href;
+const baseUrl = self.location.href.substring(0, self.location.href.lastIndexOf('/'));
 importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
