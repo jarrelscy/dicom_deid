@@ -1081,6 +1081,7 @@ class DicomDeidentifier {
             '00080030': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Study Time' },
             '00080060': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Modality' },
             '00080070': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Manufacturer' },
+            '00080080': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Institution Name' },
             '00081030': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'UNKNOWNSTUDY', description: 'Study Description' },
             '0008103E': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'UNKNOWNSTUDY', description: 'Series Description' },
             '00200011': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Series Number' },

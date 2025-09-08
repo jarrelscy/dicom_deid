@@ -40,6 +40,7 @@ const WHITELISTED_TAGS = {
     '00080060': 'Modality',
     '00080068': 'PresentationIntentType',
     '00080070': 'Manufacturer',
+    '00080080': 'InstitutionName',
     '00081030': 'StudyDescription',
     '0008103E': 'SeriesDescription',
     '00081090': 'ManufacturerModelName',
@@ -101,7 +102,7 @@ const WHITELISTED_TAGS = {
 const SCRAMBLE_UID_TAGS = ['00020003', '0020000D', '0020000E', '00080018'];
 const SCRAMBLE_DATE_TAGS = ['00080020', '00080021', '00080022', '00080023', '00100030'];
 const SCRAMBLE_TIME_TAGS = ['00080030', '00080031', '00080032', '00080033'];
-const SCRAMBLE_TEXT_TAGS = ['00080050', '00100010', '00100020'];
+const SCRAMBLE_TEXT_TAGS = ['00080050', '00100010', '00100020', '00080080'];
 
 class DicomProcessor {
     constructor(passphrase, tagConfigurations = {}, verboseMode = false) {
@@ -170,6 +171,98 @@ class DicomProcessor {
         return log;
     }
 
+    extractSOPClassUIDFallback(arrayBuffer, allowedSOPClassUIDs = []) {
+        try {
+            const bytes = new Uint8Array(arrayBuffer);
+
+            function readAscii(start, length) {
+                let s = '';
+                const end = Math.min(start + length, bytes.length);
+                for (let i = start; i < end; i++) {
+                    const ch = bytes[i];
+                    if (ch === 0) break; // stop at NUL
+                    if (ch >= 32 && ch <= 126) {
+                        s += String.fromCharCode(ch);
+                    }
+                }
+                return s.trim();
+            }
+
+            function isUID(text) {
+                return /^\d+(?:\.\d+)+$/.test(text);
+            }
+
+            function parseTagAt(i, littleEndian) {
+                // Attempt explicit VR 'UI'
+                const vr1 = bytes[i + 4];
+                const vr2 = bytes[i + 5];
+                if (vr1 === 0x55 && vr2 === 0x49) { // 'U''I'
+                    let length;
+                    if (littleEndian) {
+                        length = bytes[i + 6] | (bytes[i + 7] << 8);
+                    } else {
+                        length = (bytes[i + 6] << 8) | bytes[i + 7];
+                    }
+                    if (length > 0 && length < 128 && i + 8 + length <= bytes.length) {
+                        const s = readAscii(i + 8, length);
+                        if (isUID(s)) return s;
+                    }
+                }
+                // Implicit VR: 4-byte length
+                let length;
+                if (littleEndian) {
+                    length = (bytes[i + 4]) | (bytes[i + 5] << 8) | (bytes[i + 6] << 16) | (bytes[i + 7] << 24);
+                } else {
+                    length = (bytes[i + 7]) | (bytes[i + 6] << 8) | (bytes[i + 5] << 16) | (bytes[i + 4] << 24);
+                }
+                if (length > 0 && length < 128 && i + 8 + length <= bytes.length) {
+                    const s = readAscii(i + 8, length);
+                    if (isUID(s)) return s;
+                }
+                return null;
+            }
+
+            // Scan for 0008,0016 in LE and BE
+            for (let i = 0; i + 8 <= bytes.length; i++) {
+                // Little Endian tag: 08 00 16 00
+                if (bytes[i] === 0x08 && bytes[i + 1] === 0x00 && bytes[i + 2] === 0x16 && bytes[i + 3] === 0x00) {
+                    const uid = parseTagAt(i, true);
+                    if (uid) return uid;
+                }
+                // Big Endian tag: 00 08 00 16
+                if (bytes[i] === 0x00 && bytes[i + 1] === 0x08 && bytes[i + 2] === 0x00 && bytes[i + 3] === 0x16) {
+                    const uid = parseTagAt(i, false);
+                    if (uid) return uid;
+                }
+            }
+
+            // As a last resort, scan first 1MB for ASCII UIDs and prefer those in allowed set
+            const MAX_SCAN = Math.min(bytes.length, 1024 * 1024);
+            const head = bytes.subarray(0, MAX_SCAN);
+            const decoder = new TextDecoder('latin1');
+            const text = decoder.decode(head);
+            const regex = /1\.2\.840\.10008(?:\.[0-9]+)+/g;
+            const seen = new Set();
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const candidate = match[0];
+                if (!seen.has(candidate)) {
+                    seen.add(candidate);
+                    if (allowedSOPClassUIDs.includes(candidate)) {
+                        return candidate;
+                    }
+                }
+            }
+            // If none matched allowed, return the first seen candidate
+            if (seen.size > 0) {
+                for (const c of seen) return c;
+            }
+        } catch (e) {
+            // ignore fallback errors
+        }
+        return null;
+    }
+
     async checkSOPClassUID(arrayBuffer, filename, allowedSOPClassUIDs) {
         try {
             // Parse DICOM file to check SOPClassUID
@@ -196,6 +289,17 @@ class DicomProcessor {
             
         } catch (error) {
             console.error(`Error checking SOPClassUID for ${filename}:`, error);
+            // Fallback: heuristic extraction
+            const fallbackUID = this.extractSOPClassUIDFallback(arrayBuffer, allowedSOPClassUIDs);
+            if (fallbackUID) {
+                const isAllowed = allowedSOPClassUIDs.includes(fallbackUID);
+                if (!isAllowed) {
+                    this.logError(filename, 'SOPCLASSUID_FILTERED', `SOPClassUID ${fallbackUID} not in allowed list (heuristic)`, fallbackUID);
+                } else {
+                    this.logVerbose(filename, '00080016', 'SOPClassUID', '[PARSE FAILED]', 'HEURISTIC_PARSE', fallbackUID);
+                }
+                return isAllowed;
+            }
             this.logError(filename, 'SOPCLASSUID_PARSE_ERROR', error.message);
             return false;
         }
