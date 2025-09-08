@@ -271,7 +271,7 @@ class DicomProcessor {
                             value = [await this.scrambler.scrambleUID(value[0])];
                             action = 'SCRAMBLE_UID';
                         } else if (SCRAMBLE_DATE_TAGS.includes(tag)) {
-                            value = [await this.scrambler.scrambleDate(value[0])];
+                            value = [await this.scrambler.scrambleDate(value[0], originalPatientID || null)];
                             action = 'SCRAMBLE_DATE';
                         } else if (SCRAMBLE_TIME_TAGS.includes(tag)) {
                             value = [await this.scrambler.scrambleTime(value[0])];

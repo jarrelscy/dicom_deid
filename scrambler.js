@@ -99,33 +99,29 @@ class DicomScrambler {
     /**
      * Scramble DICOM date (YYYYMMDD format)
      */
-    async scrambleDate(input) {
+    async scrambleDate(input, key = null) {
         if (!input || input.length !== 8) return input;
         
-        const hash = await this.generateHash(input);
+        const hash = await this.generateHash(((key || 'global') + 'date_offset'));
         const numeric = this.hashToNumeric(hash);
         
-        // Apply mod (365 * 20) for offset in days
         const offsetDays = numeric % (365 * 20);
         
-        // Parse original date
         const year = parseInt(input.substr(0, 4));
         const month = parseInt(input.substr(4, 2));
         const day = parseInt(input.substr(6, 2));
         
         const originalDate = new Date(year, month - 1, day);
         
-        // Apply offset
         const scrambledDate = new Date(originalDate);
         scrambledDate.setDate(scrambledDate.getDate() + offsetDays);
         
-        // Format as YYYYMMDD - ensure exactly 8 characters
         const scrambledYear = scrambledDate.getFullYear().toString().padStart(4, '0');
         const scrambledMonth = (scrambledDate.getMonth() + 1).toString().padStart(2, '0');
         const scrambledDay = scrambledDate.getDate().toString().padStart(2, '0');
         
         const result = scrambledYear + scrambledMonth + scrambledDay;
-        return result.substr(0, 8); // Ensure exactly 8 characters
+        return result.substr(0, 8);
     }
 
     /**
