@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM De-identification Tool</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="jszip.min.js"></script>
+    <script src="dcmjs.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>DICOM De-identification Tool</h1>
+            <p>Secure client-side processing of DICOM files with passphrase-based scrambling</p>
+            <nav class="main-nav">
+                <button id="mainPageBtn" class="nav-btn active">Main</button>
+                <button id="configPageBtn" class="nav-btn">Configuration</button>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Main Page -->
+            <div id="mainPage" class="page-content">
+                <div class="upload-section">
+                <div class="form-group">
+                    <label for="passphrase">Enter Passphrase:</label>
+                    <input type="password" id="passphrase" placeholder="Enter secure passphrase" required>
+                    <small>This passphrase will be used to deterministically scramble sensitive data</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="verboseMode">
+                        <span>Verbose Mode - Log detailed tag processing information</span>
+                    </label>
+                    <small>When enabled, the output.log will include detailed information about each DICOM tag and how it was processed</small>
+                </div>
+
+                <div class="mode-selector">
+                    <button id="zipModeBtn" class="mode-btn active">ZIP Mode</button>
+                    <button id="folderModeBtn" class="mode-btn">Folder Mode</button>
+                </div>
+                
+                <div id="zipMode" class="upload-mode">
+                    <div class="file-upload" id="fileUpload">
+                        <div class="upload-area" id="uploadArea">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7,10 12,15 17,10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            <p>Drop ZIP or DICOM file here or click to browse</p>
+                            <small>ZIP files containing DICOM files or individual .dcm files are supported</small>
+                        </div>
+                        <input type="file" id="fileInput" accept=".zip,.dcm" hidden>
+                    </div>
+                </div>
+                
+                <div id="folderMode" class="upload-mode" style="display: none;">
+                    <div class="folder-selection">
+                        <div class="folder-item">
+                            <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2l5 2 3-3h6a2 2 0 0 1 2 2v15z"/>
+                            </svg>
+                            <div>
+                                <h4>Input Folder</h4>
+                                <p id="inputFolderPath">No folder selected</p>
+                                <button id="selectInputBtn" class="folder-btn">Select Input Folder</button>
+                            </div>
+                        </div>
+                        
+                        <div class="folder-item">
+                            <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2l5 2 3-3h6a2 2 0 0 1 2 2v15z"/>
+                            </svg>
+                            <div>
+                                <h4>Output Folder</h4>
+                                <p id="outputFolderPath">No folder selected</p>
+                                <button id="selectOutputBtn" class="folder-btn">Select Output Folder</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="folder-support-warning">
+                        <p><strong>Note:</strong> Folder mode requires a Chromium-based browser (Chrome, Edge, Opera)</p>
+                    </div>
+                </div>
+
+                <div class="sopclass-filter-section">
+                    <h3>Select DICOM Types to Include</h3>
+                    <div class="sopclass-checkboxes">
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1" checked>
+                            <span>Computed Radiography Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_1" checked>
+                            <span>Digital X-Ray Image Storage - For Presentation</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_1_1" checked>
+                            <span>Digital X-Ray Image Storage - For Processing</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_2" checked>
+                            <span>Digital Mammography X-Ray Image Storage - For Presentation</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_2_1" checked>
+                            <span>Digital Mammography X-Ray Image Storage - For Processing</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_3" checked>
+                            <span>Digital Intra-Oral X-Ray Image Storage - For Presentation</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_3_1" checked>
+                            <span>Digital Intra-Oral X-Ray Image Storage - For Processing</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2" checked>
+                            <span>CT Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2_1" checked>
+                            <span>Enhanced CT Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2_2" checked>
+                            <span>Legacy Converted Enhanced CT Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_4" checked>
+                            <span>MR Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_4_1" checked>
+                            <span>Enhanced MR Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_4_2" checked>
+                            <span>MR Spectroscopy Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_4_3" checked>
+                            <span>Enhanced MR Color Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_4_4" checked>
+                            <span>Legacy Converted Enhanced MR Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_6_1">
+                            <span>Ultrasound Image Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_6_2">
+                            <span>Enhanced US Volume Storage</span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_7">
+                            <span>Secondary Capture Image Storage</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button id="processBtn" class="process-btn" disabled>
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5,3 19,12 5,21 5,3"/>
+                    </svg>
+                    Process DICOM Files
+                </button>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <h3>Processing Files...</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-info">
+                    <span id="progressText">0 / 0 files processed</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="worker-status" id="workerStatus"></div>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h3>Processing Complete!</h3>
+                <div class="results-info">
+                    <p id="resultsText"></p>
+                    <button id="downloadBtn" class="download-btn">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7,10 12,15 17,10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Download De-identified ZIP
+                    </button>
+                </div>
+            </div>
+
+            <div class="error-section" id="errorSection" style="display: none;">
+                <h3>Error</h3>
+                <p id="errorText"></p>
+                <button id="resetBtn" class="reset-btn">Try Again</button>
+            </div>
+            </div>
+
+            <!-- Configuration Page -->
+            <div id="configPage" class="page-content" style="display: none;">
+                <div class="config-section">
+                    <h2>Tag Configuration</h2>
+                    <p>Configure how each DICOM tag should be handled during de-identification</p>
+                    
+                    <div class="config-controls">
+                        <button id="saveConfigBtn" class="config-btn">Save Configuration</button>
+                        <button id="loadConfigBtn" class="config-btn">Load Configuration</button>
+                        <button id="resetConfigBtn" class="config-btn">Reset to Default</button>
+                    </div>
+
+                    <div class="tag-config-container">
+                        <div class="config-header">
+                            <div class="tag-column">Tag</div>
+                            <div class="tag-column">Description</div>
+                            <div class="scenario-column">If Present</div>
+                            <div class="scenario-column">If Not Present</div>
+                        </div>
+                        
+                        <div id="tagConfigList" class="tag-config-list">
+                            <!-- Tag configuration rows will be dynamically generated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>All processing is done locally in your browser. No data is transmitted to any server.</p>
+        </footer>
+    </div>
+
+    <script src="scrambler.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
