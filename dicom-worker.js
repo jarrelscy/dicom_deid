@@ -399,21 +399,62 @@ class DicomProcessor {
             // Handle missing tags based on configuration
             if (this.tagConfigurations) {
                 for (const [tag, config] of Object.entries(this.tagConfigurations)) {
-                    // Check if tag is missing OR has empty/null value and has a "replace" action for "if not present"
+                    // Check if tag is missing OR has empty/null value and has a configured action for "if not present"
                     const tagValue = this.getTagValue(dict, tag);
                     const isEffectivelyMissing = !dict[tag] || !tagValue || tagValue.toString().trim() === '';
-                    
-                    if (isEffectivelyMissing && config.ifNotPresent === 'replace' && config.notPresentValue) {
-                        // Get the VR for this tag from the whitelist definition
-                        const vr = this.getVRForTag(tag);
-                        if (vr) {
-                            // Create or update the tag with the replacement value
-                            dict[tag] = {
-                                vr: vr,
-                                Value: [config.notPresentValue]
-                            };
-                            // Log the addition of missing tag
-                            this.logVerbose(filename, tag, config.description, tagValue || '[MISSING]', 'ADD_MISSING', config.notPresentValue);
+
+                    if (isEffectivelyMissing) {
+                        if (config.ifNotPresent === 'replace' && config.notPresentValue) {
+                            // Get the VR for this tag from the whitelist definition
+                            const vr = this.getVRForTag(tag);
+                            if (vr) {
+                                // Create or update the tag with the replacement value
+                                dict[tag] = {
+                                    vr: vr,
+                                    Value: [config.notPresentValue]
+                                };
+                                // Log the addition of missing tag
+                                this.logVerbose(
+                                    filename,
+                                    tag,
+                                    config.description,
+                                    tagValue || '[MISSING]',
+                                    'ADD_MISSING',
+                                    config.notPresentValue
+                                );
+                            }
+                        } else if (config.ifNotPresent === 'scrambleFromStudyUID') {
+                            const studySourceUID = originalStudyUID || this.getTagValue(dict, '0020000D');
+                            if (studySourceUID) {
+                                const vr = this.getVRForTag(tag);
+                                const maxLength = this.getVRMaxLength(vr);
+                                const generatedValue = await this.scrambler.scrambleFromStudyUID(studySourceUID, maxLength);
+                                if (generatedValue) {
+                                    if (!dict[tag]) {
+                                        dict[tag] = { vr: vr, Value: [] };
+                                    } else {
+                                        dict[tag].vr = dict[tag].vr || vr;
+                                    }
+                                    dict[tag].Value = [generatedValue];
+                                    this.logVerbose(
+                                        filename,
+                                        tag,
+                                        config.description,
+                                        tagValue || '[MISSING]',
+                                        'SCRAMBLE_FROM_STUDY_UID',
+                                        generatedValue
+                                    );
+                                }
+                            } else {
+                                this.logVerbose(
+                                    filename,
+                                    tag,
+                                    config.description,
+                                    tagValue || '[MISSING]',
+                                    'SCRAMBLE_FROM_STUDY_UID_SKIPPED',
+                                    '[NO_STUDY_UID]'
+                                );
+                            }
                         }
                     }
                 }

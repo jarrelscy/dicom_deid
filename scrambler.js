@@ -78,7 +78,7 @@ class DicomScrambler {
      */
     async scrambleText(input, maxLength = 32) {
         if (!input) return input;
-        
+
         const hash = await this.generateHash(input);
         const hex = this.hashToHex(hash);
         
@@ -94,6 +94,25 @@ class DicomScrambler {
         // Respect both max length constraint and original input length
         const finalLength = Math.min(maxLength, Math.max(8, input.length)); // At least 8 chars
         return result.substr(0, finalLength);
+    }
+
+    /**
+     * Generate deterministic text value derived from Study Instance UID
+     */
+    async scrambleFromStudyUID(studyUID, maxLength = 16) {
+        if (!studyUID) return '';
+
+        const hash = await this.generateHash(`studyuid:${studyUID}`);
+        const hex = this.hashToHex(hash);
+
+        let result = '';
+        for (let i = 0; i < hex.length && result.length < maxLength; i += 2) {
+            const byte = parseInt(hex.substr(i, 2), 16);
+            const char = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[byte % 36];
+            result += char;
+        }
+
+        return result.substr(0, maxLength);
     }
 
     /**
