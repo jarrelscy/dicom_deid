@@ -1071,7 +1071,7 @@ class DicomDeidentifier {
             '0020000D': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Study Instance UID' },
             '0020000E': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Series Instance UID' },
             '00080018': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'SOP Instance UID' },
-            '00080050': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Accession Number' },
+            '00080050': { ifPresent: 'scramble', ifNotPresent: 'scrambleFromStudyUID', presentValue: '', notPresentValue: '', description: 'Accession Number' },
             '00100010': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'ANONYMOUS^PATIENT', description: 'Patient Name' },
             '00100020': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'PATIENTID1', description: 'Patient ID' },
             '00100030': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: '19000101', description: 'Patient Birth Date' },
@@ -1131,6 +1131,7 @@ class DicomDeidentifier {
                         <select class="action-select" data-tag="${tag}" data-scenario="notpresent">
                             <option value="delete" ${config.ifNotPresent === 'delete' ? 'selected' : ''}>Delete</option>
                             <option value="unchanged" ${config.ifNotPresent === 'unchanged' ? 'selected' : ''}>Unchanged</option>
+                            <option value="scrambleFromStudyUID" ${config.ifNotPresent === 'scrambleFromStudyUID' ? 'selected' : ''}>Generate from Study UID</option>
                             <option value="replace" ${config.ifNotPresent === 'replace' ? 'selected' : ''}>Add Value</option>
                         </select>
                         <input type="text" class="replace-value" data-tag="${tag}" data-scenario="notpresent" 
