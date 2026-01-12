@@ -684,7 +684,8 @@ class DicomDeidentifier {
         return await zip.generateAsync({
             type: 'blob',
             compression: 'DEFLATE',
-            compressionOptions: { level: 6 }
+            compressionOptions: { level: 6 },
+            streamFiles: true
         });
     }
     
