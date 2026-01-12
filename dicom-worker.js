@@ -767,6 +767,11 @@ self.onmessage = async function(e) {
         
         // Send completion with results and audit trail
         console.log(`Worker ${workerId}: Generated ${processor.verboseLogs.length} verbose logs, verboseMode was:`, verboseMode);
+        const transferables = results
+            .map(result => result.data)
+            .filter(data => data)
+            .map(data => (ArrayBuffer.isView(data) ? data.buffer : data))
+            .filter(buffer => buffer instanceof ArrayBuffer);
         self.postMessage({
             type: 'COMPLETE',
             workerId: workerId,
@@ -776,7 +781,7 @@ self.onmessage = async function(e) {
             errorLog: processor.generateErrorLog(),
             verboseLogs: processor.verboseLogs,
             skippedFiles: skippedFiles
-        });
+        }, transferables);
     } else {
         console.log('Worker received unknown message type:', type);
     }
