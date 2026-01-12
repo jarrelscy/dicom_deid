@@ -530,6 +530,11 @@ class DicomDeidentifier {
         console.log(`ZIP mode: Sending verboseMode=${this.verboseMode} to workers`);
         fileChunks.forEach((chunk, index) => {
             if (chunk.length > 0) {
+                const transferables = chunk
+                    .map(file => file.data)
+                    .filter(data => data)
+                    .map(data => (ArrayBuffer.isView(data) ? data.buffer : data))
+                    .filter(buffer => buffer instanceof ArrayBuffer);
                 this.workers[index].postMessage({
                     type: 'PROCESS_FILES',
                     data: {
@@ -540,7 +545,7 @@ class DicomDeidentifier {
                         tagConfigurations: this.tagConfigurations,
                         verboseMode: this.verboseMode
                     }
-                });
+                }, transferables);
             }
         });
         
@@ -861,6 +866,11 @@ class DicomDeidentifier {
                 };
                 
                 console.log(`Posting message to worker ${index}`);
+                const transferables = chunk
+                    .map(file => file.data)
+                    .filter(data => data)
+                    .map(data => (ArrayBuffer.isView(data) ? data.buffer : data))
+                    .filter(buffer => buffer instanceof ArrayBuffer);
                 worker.postMessage({
                     type: 'PROCESS_CHUNK',
                     files: chunk,
@@ -869,7 +879,7 @@ class DicomDeidentifier {
                     allowedSOPClassUIDs: this.allowedSOPClassUIDs,
                     tagConfigurations: this.tagConfigurations,
                     verboseMode: this.verboseMode
-                });
+                }, transferables);
             });
         });
         
