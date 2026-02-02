@@ -70,6 +70,11 @@ class DicomDeidentifier {
         this.loadConfigBtn = document.getElementById('loadConfigBtn');
         this.resetConfigBtn = document.getElementById('resetConfigBtn');
         this.tagConfigList = document.getElementById('tagConfigList');
+
+        // Disclaimer modal elements
+        this.disclaimerModal = document.getElementById('disclaimerModal');
+        this.disclaimerCheckbox = document.getElementById('disclaimerCheckbox');
+        this.disclaimerAgreeBtn = document.getElementById('disclaimerAgreeBtn');
         
         // Bind event listeners
         this.bindEvents();
@@ -79,6 +84,9 @@ class DicomDeidentifier {
         
         // Update process button state
         this.updateProcessButton();
+
+        // Show disclaimer modal on load
+        this.showDisclaimerModal();
     }
     
     bindEvents() {
@@ -196,6 +204,45 @@ class DicomDeidentifier {
         this.resetConfigBtn.addEventListener('click', () => {
             this.resetConfiguration();
         });
+
+        if (this.disclaimerCheckbox) {
+            this.disclaimerCheckbox.addEventListener('change', () => {
+                const isChecked = this.disclaimerCheckbox.checked;
+                this.disclaimerAgreeBtn.disabled = !isChecked;
+            });
+        }
+
+        if (this.disclaimerAgreeBtn) {
+            this.disclaimerAgreeBtn.addEventListener('click', () => {
+                this.hideDisclaimerModal();
+            });
+        }
+    }
+
+    showDisclaimerModal() {
+        if (!this.disclaimerModal) {
+            return;
+        }
+
+        if (this.disclaimerCheckbox) {
+            this.disclaimerCheckbox.checked = false;
+        }
+
+        if (this.disclaimerAgreeBtn) {
+            this.disclaimerAgreeBtn.disabled = true;
+        }
+
+        this.disclaimerModal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+    }
+
+    hideDisclaimerModal() {
+        if (!this.disclaimerModal) {
+            return;
+        }
+
+        this.disclaimerModal.classList.add('hidden');
+        document.body.classList.remove('modal-open');
     }
     
     handleFileUpload(file) {

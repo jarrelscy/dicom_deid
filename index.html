@@ -240,6 +240,22 @@
         </footer>
     </div>
 
+    <div id="disclaimerModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="disclaimerTitle" aria-describedby="disclaimerText">
+        <div class="modal">
+            <h2 id="disclaimerTitle">Disclaimer</h2>
+            <p id="disclaimerText">
+                This tool is provided to assist with the deidentification of radiology imaging data. Use of this tool does not guarantee that all personal identifiers have been removed. In all circumstances, responsibility for ensuring that data is correctly and fully deidentified rests solely with the party transferring the data. Users must independently verify the completeness and correctness of deidentification prior to sharing any data with Harrison.ai. Harrison.ai does not request or seek to receive identified patient data, and use of this tool does not transfer responsibility or liability to Harrison.ai.
+            </p>
+            <label class="modal-checkbox">
+                <input type="checkbox" id="disclaimerCheckbox">
+                <span>I have read and agree to the disclaimer above.</span>
+            </label>
+            <div class="modal-actions">
+                <button id="disclaimerAgreeBtn" class="primary-btn" disabled>Agree &amp; Continue</button>
+            </div>
+        </div>
+    </div>
+
     <script src="scrambler.js"></script>
     <script src="main.js"></script>
 </body>
