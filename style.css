@@ -12,6 +12,10 @@ body {
     min-height: 100vh;
 }
 
+body.modal-open {
+    overflow: hidden;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -197,6 +201,77 @@ main {
 .checkbox-item span {
     color: #495057;
     user-select: none;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1000;
+}
+
+.modal-overlay.hidden {
+    display: none;
+}
+
+.modal {
+    background: #fff;
+    color: #1f2937;
+    max-width: 720px;
+    width: 100%;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.25);
+}
+
+.modal h2 {
+    margin-bottom: 12px;
+    font-size: 1.5rem;
+}
+
+.modal p {
+    color: #374151;
+    margin-bottom: 20px;
+}
+
+.modal-checkbox {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+}
+
+.modal-checkbox input[type="checkbox"] {
+    margin-top: 4px;
+    transform: scale(1.1);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.primary-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.primary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .progress-section {
