@@ -1187,7 +1187,6 @@ class DicomDeidentifier {
                 <div>
                     <div class="scenario-controls">
                         <select class="action-select" data-tag="${tag}" data-scenario="notpresent">
-                            <option value="delete" ${config.ifNotPresent === 'delete' ? 'selected' : ''}>Delete</option>
                             <option value="unchanged" ${config.ifNotPresent === 'unchanged' ? 'selected' : ''}>Unchanged</option>
                             <option value="scrambleFromStudyUID" ${config.ifNotPresent === 'scrambleFromStudyUID' ? 'selected' : ''}>Generate from Study UID</option>
                             <option value="replace" ${config.ifNotPresent === 'replace' ? 'selected' : ''}>Add Value</option>
