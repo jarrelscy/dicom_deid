@@ -15,7 +15,10 @@ class DicomDeidentifier {
         this.errorLogs = [];
         this.verboseLogs = [];
         this.completedWorkers = 0;
-        
+
+        // Memory management: max files per worker batch and max total in-flight
+        this.BATCH_SIZE = 50;   // files per worker batch dispatch
+
         // File System Access API variables
         this.processingMode = 'zip'; // 'zip' or 'folder'
         this.inputDirectoryHandle = null;
@@ -417,9 +420,9 @@ class DicomDeidentifier {
             if (this.processingMode === 'zip') {
                 this.processWithWorkers(fileChunks);
             } else {
-                console.log('Calling processWithWorkersStreaming...');
-                await this.processWithWorkersStreaming(fileChunks);
-                console.log('processWithWorkersStreaming completed.');
+                console.log('Calling processWithWorkersQueue (BP-01 batch queue)...');
+                await this.processWithWorkersQueue(dicomFiles);
+                console.log('processWithWorkersQueue completed.');
             }
             
         } catch (error) {
@@ -499,31 +502,32 @@ class DicomDeidentifier {
         
         async function processDirectory(directoryHandle, relativePath = '') {
             console.log(`Processing directory: ${relativePath || 'root'}`);
-            
+
             for await (const [name, handle] of directoryHandle.entries()) {
                 const currentPath = relativePath ? `${relativePath}/${name}` : name;
-                
+
                 if (handle.kind === 'directory') {
                     console.log(`Found subdirectory: ${currentPath}`);
                     await processDirectory(handle, currentPath);
                 } else if (handle.kind === 'file') {
                     filesChecked++;
-                    // Checking file
-                    
+
                     try {
+                        // MM-03: Read only 132-byte header to check DICOM magic bytes.
+                        // Do NOT read the full file — that would load the entire dataset into RAM.
                         const file = await handle.getFile();
-                        const arrayBuffer = await file.arrayBuffer();
-                        
-                        if (self.isDicomFile(arrayBuffer)) {
+                        const headerSlice = await file.slice(0, 132).arrayBuffer();
+
+                        if (self.isDicomFile(headerSlice)) {
                             dicomFilesFound++;
-                            // DICOM file found
+                            // Store only the file handle — data will be read lazily at dispatch time
                             dicomFiles.push({
                                 filename: currentPath,
-                                data: arrayBuffer,
                                 path: currentPath,
                                 fileHandle: handle
+                                // NOTE: no 'data' field — loaded lazily in processWithWorkersQueue()
                             });
-                            
+
                             // Update progress with live count
                             self.updateProgress(`Listing Files ... (${dicomFilesFound} DICOM files found)`, 5 + (filesChecked * 10 / Math.max(filesChecked, 100)));
                         }
@@ -859,24 +863,22 @@ class DicomDeidentifier {
                         // Worker completed
                         
                         // Save processed files directly to output directory
-                        for (const result of results || []) {
+                        for (const result of (results || [])) {
                             if (result.success && result.data) {
-                                // Saving processed file
                                 await this.saveProcessedFile(result);
-                                
-                                // Update progress after each file is saved
-                                this.processedFiles++;
-                                this.updateProgress(`Processed ${this.processedFiles} / ${this.totalFiles} files`, 
-                                    20 + (this.processedFiles / this.totalFiles) * 70);
-                            } else {
-                                // Count failed files too for progress tracking
-                                this.processedFiles++;
-                                this.updateProgress(`Processed ${this.processedFiles} / ${this.totalFiles} files`, 
-                                    20 + (this.processedFiles / this.totalFiles) * 70);
+                                result.data = null; // MM-02: release ArrayBuffer after save
                             }
+                            this.results.push({
+                                filename: result.filename,
+                                success: result.success,
+                                error: result.error || null
+                            });
+
+                            // Update progress after each file
+                            this.processedFiles++;
+                            this.updateProgress(`Processed ${this.processedFiles} / ${this.totalFiles} files`,
+                                20 + (this.processedFiles / this.totalFiles) * 70);
                         }
-                        
-                        this.results.push(...(results || []));
                         this.auditTrails.push(...(auditTrail || []));
                         
                         // Collect verbose logs if available
@@ -936,7 +938,146 @@ class DicomDeidentifier {
             this.showError('Processing failed: ' + error.message);
         }
     }
-    
+
+    /**
+     * BP-01: Queue-based batch processing for folder mode.
+     * Replaces processWithWorkersStreaming() for folder mode.
+     *
+     * Memory profile: at most (workerCount × BATCH_SIZE) files in RAM at any time.
+     * File data is read lazily from fileHandle just before dispatch, and transferred
+     * to the worker (zero-copy). After the worker completes, result.data is nulled
+     * immediately after saving to disk (MM-02).
+     */
+    async processWithWorkersQueue(dicomFiles) {
+        const BATCH_SIZE = this.BATCH_SIZE;
+        let cursor = 0;
+        const totalFiles = dicomFiles.length;
+
+        // Lazily read file data from handle just before dispatch
+        const readFileData = async (fileDescriptor) => {
+            const file = await fileDescriptor.fileHandle.getFile();
+            const data = await file.arrayBuffer();
+            return {
+                filename: fileDescriptor.filename,
+                path: fileDescriptor.path,
+                data: data
+            };
+        };
+
+        // Prepare next batch: read data for up to BATCH_SIZE files
+        const prepareNextBatch = async () => {
+            if (cursor >= totalFiles) return null;
+            const end = Math.min(cursor + BATCH_SIZE, totalFiles);
+            const batchDescriptors = dicomFiles.slice(cursor, end);
+            cursor = end;
+            // Read file data for this batch (only these files are in RAM now)
+            const batch = await Promise.all(batchDescriptors.map(readFileData));
+            return batch;
+        };
+
+        // Dispatch a batch to a worker and wait for completion
+        const dispatchBatch = (worker, batch, workerIndex) => {
+            return new Promise((resolve, reject) => {
+                const handler = async (e) => {
+                    if (e.data.type !== 'COMPLETE') return;
+                    worker.removeEventListener('message', handler);
+                    worker.removeEventListener('error', errHandler);
+
+                    const { results, auditTrail, verboseLogs, errorLog, skippedFiles } = e.data;
+
+                    // MM-02: Save to disk immediately, then null out data to free RAM
+                    for (const result of (results || [])) {
+                        if (result.success && result.data) {
+                            try {
+                                await this.saveProcessedFile(result);
+                            } catch (saveErr) {
+                                console.error('Error saving file:', result.filename, saveErr);
+                                result.success = false;
+                                result.error = saveErr.message;
+                            }
+                            result.data = null; // Release ArrayBuffer immediately
+                        }
+                        // Keep only lightweight metadata — no binary data
+                        this.results.push({
+                            filename: result.filename,
+                            success: result.success,
+                            error: result.error || null
+                        });
+
+                        // Update progress counter
+                        this.processedFiles++;
+                        const pct = 20 + (this.processedFiles / this.totalFiles) * 70;
+                        this.updateProgress(`Processed ${this.processedFiles} / ${this.totalFiles} files`, pct);
+                    }
+
+                    // Collect audit trails (lightweight — no binary data)
+                    if (auditTrail) {
+                        this.auditTrails.push(...auditTrail);
+                    }
+
+                    // Collect verbose logs if enabled
+                    if (verboseLogs && verboseLogs.length > 0) {
+                        this.verboseLogs.push(...verboseLogs);
+                    }
+
+                    // Collect error logs
+                    if (errorLog) {
+                        this.errorLogs.push(errorLog);
+                    }
+
+                    // Track skipped files
+                    if (skippedFiles) {
+                        this.skippedFiles = (this.skippedFiles || 0) + skippedFiles;
+                    }
+
+                    resolve();
+                };
+
+                const errHandler = (err) => {
+                    worker.removeEventListener('message', handler);
+                    worker.removeEventListener('error', errHandler);
+                    reject(err);
+                };
+
+                worker.addEventListener('message', handler);
+                worker.addEventListener('error', errHandler);
+
+                // Transfer ArrayBuffers to worker (zero-copy move — main thread loses reference)
+                const transferables = batch
+                    .map(f => f.data)
+                    .filter(d => d instanceof ArrayBuffer);
+
+                worker.postMessage({
+                    type: 'PROCESS_CHUNK',
+                    files: batch,
+                    passphrase: this.passphrase,
+                    workerId: workerIndex,
+                    allowedSOPClassUIDs: this.allowedSOPClassUIDs,
+                    tagConfigurations: this.tagConfigurations,
+                    verboseMode: this.verboseMode
+                }, transferables);
+            });
+        };
+
+        // Each worker runs a loop: pull next batch → dispatch → wait → repeat
+        const runWorker = async (worker, workerIndex) => {
+            while (true) {
+                const batch = await prepareNextBatch();
+                if (!batch) break; // No more files
+                await dispatchBatch(worker, batch, workerIndex);
+                // After dispatchBatch resolves: batch ArrayBuffers have been transferred
+                // to the worker (and are now null on main thread), and result.data has
+                // been nulled after saving. Memory is free.
+            }
+        };
+
+        // Run all workers concurrently; each pulls batches sequentially from the shared queue
+        await Promise.all(this.workers.map((worker, i) => runWorker(worker, i)));
+
+        // All workers done — finalize
+        await this.finalizeStreamingResults();
+    }
+
     async saveProcessedFile(result) {
         try {
             // Create directory structure in output folder if needed
