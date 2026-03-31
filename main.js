@@ -13,7 +13,7 @@ class DicomDeidentifier {
         this.results = [];
         this.auditTrails = [];
         this.errorLogs = [];
-        this.verboseLogs = [];
+        this.verboseLog = '';
         this.completedWorkers = 0;
 
         // Memory management: max files per worker batch and max total in-flight
@@ -633,11 +633,8 @@ class DicomDeidentifier {
             this.auditTrails = this.auditTrails.concat(data.auditTrail);
         }
         
-        if (data.verboseLogs) {
-            console.log(`ZIP mode: Received ${data.verboseLogs.length} verbose logs from worker ${workerId}, total now: ${this.verboseLogs.length + data.verboseLogs.length}`);
-            this.verboseLogs = this.verboseLogs.concat(data.verboseLogs);
-        } else {
-            console.log(`ZIP mode: No verbose logs received from worker ${workerId}`);
+        if (data.verboseLog) {
+            this.verboseLog += data.verboseLog;
         }
         if (data.errorLog) {
             this.errorLogs.push(data.errorLog);
@@ -725,21 +722,12 @@ class DicomDeidentifier {
             }
         }
         
-        // Add verbose logs if enabled
-        if (this.verboseMode && this.verboseLogs.length > 0) {
+        if (this.verboseMode && this.verboseLog.length > 0) {
             logContent += '\n\nDetailed Tag Processing Log\n';
-            logContent += '=' .repeat(40) + '\n\n';
-            this.verboseLogs.forEach(log => {
-                logContent += `File: ${log.filename}\n`;
-                logContent += `Tag: ${log.tag} (${log.tagName})\n`;
-                logContent += `Original Value: ${log.originalValue}\n`;
-                logContent += `Action: ${log.action}\n`;
-                logContent += `New Value: ${log.newValue}\n`;
-                logContent += `Time: ${log.timestamp}\n`;
-                logContent += '-'.repeat(50) + '\n';
-            });
+            logContent += '='.repeat(40) + '\n';
+            logContent += this.verboseLog;
         }
-        
+
         zip.file('output.log', logContent);
         
         return await zip.generateAsync({
@@ -861,7 +849,7 @@ class DicomDeidentifier {
                 const worker = this.workers[index];
                 
                 worker.onmessage = async (e) => {
-                    const { type, workerId, results, auditTrail, skippedFiles, verboseLogs, errorLog } = e.data;
+                    const { type, workerId, results, auditTrail, skippedFiles, verboseLog, errorLog } = e.data;
                     // Worker message received
                     
                     if (type === 'COMPLETE') {
@@ -886,9 +874,8 @@ class DicomDeidentifier {
                         }
                         this.auditTrails.push(...(auditTrail || []));
                         
-                        // Collect verbose logs if available
-                        if (verboseLogs && verboseLogs.length > 0) {
-                            this.verboseLogs.push(...verboseLogs);
+                        if (verboseLog) {
+                            this.verboseLog += verboseLog;
                         }
                         
                         // Collect error logs if available
@@ -988,7 +975,7 @@ class DicomDeidentifier {
                     worker.removeEventListener('message', handler);
                     worker.removeEventListener('error', errHandler);
 
-                    const { results, auditTrail, verboseLogs, errorLog, skippedFiles } = e.data;
+                    const { results, auditTrail, verboseLog, errorLog, skippedFiles } = e.data;
 
                     // MM-02: Save to disk immediately, then null out data to free RAM
                     for (const result of (results || [])) {
@@ -1020,9 +1007,8 @@ class DicomDeidentifier {
                         this.auditTrails.push(...auditTrail);
                     }
 
-                    // Collect verbose logs if enabled
-                    if (verboseLogs && verboseLogs.length > 0) {
-                        this.verboseLogs.push(...verboseLogs);
+                    if (verboseLog) {
+                        this.verboseLog += verboseLog;
                     }
 
                     // Collect error logs
@@ -1143,19 +1129,10 @@ class DicomDeidentifier {
                 }
             }
             
-            // Add verbose logs if enabled
-            if (this.verboseMode && this.verboseLogs.length > 0) {
+            if (this.verboseMode && this.verboseLog.length > 0) {
                 logContent += '\n\nDetailed Tag Processing Log\n';
-                logContent += '=' .repeat(40) + '\n\n';
-                this.verboseLogs.forEach(log => {
-                    logContent += `File: ${log.filename}\n`;
-                    logContent += `Tag: ${log.tag} (${log.tagName})\n`;
-                    logContent += `Original Value: ${log.originalValue}\n`;
-                    logContent += `Action: ${log.action}\n`;
-                    logContent += `New Value: ${log.newValue}\n`;
-                    logContent += `Time: ${log.timestamp}\n`;
-                    logContent += '-'.repeat(50) + '\n';
-                });
+                logContent += '='.repeat(40) + '\n';
+                logContent += this.verboseLog;
             }
             
             const logFileHandle = await this.outputDirectoryHandle.getFileHandle('output.log', { create: true });

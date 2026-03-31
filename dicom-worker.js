@@ -111,7 +111,11 @@ class DicomProcessor {
         this.errorLog = [];
         this.tagConfigurations = tagConfigurations;
         this.verboseMode = verboseMode;
-        this.verboseLogs = [];
+        // Pre-formatted string instead of array-of-objects: avoids per-tag object
+        // allocation overhead (8M+ objects for large datasets) and redundant filename
+        // storage. Timestamp is emitted once per file, not once per tag.
+        this.verboseLog = '';
+        this._verboseCurrentFile = null;
     }
 
     logError(filename, errorType, errorMessage, sopClassUID = null) {
@@ -126,17 +130,16 @@ class DicomProcessor {
     }
 
     logVerbose(filename, tag, tagName, originalValue, action, newValue) {
-        if (this.verboseMode) {
-            this.verboseLogs.push({
-                filename: filename,
-                tag: tag,
-                tagName: tagName,
-                originalValue: originalValue || '[EMPTY/MISSING]',
-                action: action,
-                newValue: newValue || '[DELETED/UNCHANGED]',
-                timestamp: new Date().toISOString()
-            });
+        if (!this.verboseMode) return;
+        // Emit a per-file header the first time we see a new filename, so the
+        // timestamp is recorded once per file rather than once per tag.
+        if (filename !== this._verboseCurrentFile) {
+            this._verboseCurrentFile = filename;
+            this.verboseLog += `\n--- ${filename} [${new Date().toISOString()}] ---\n`;
         }
+        const orig = originalValue || '[empty]';
+        const next = newValue || '[removed]';
+        this.verboseLog += `  ${tag} (${tagName}): "${orig}" → ${action} → "${next}"\n`;
     }
 
     generateErrorLog() {
@@ -766,7 +769,7 @@ self.onmessage = async function(e) {
         // Worker finished processing all files
         
         // Send completion with results and audit trail
-        console.log(`Worker ${workerId}: Generated ${processor.verboseLogs.length} verbose logs, verboseMode was:`, verboseMode);
+        console.log(`Worker ${workerId}: verboseMode was:`, verboseMode);
         const transferables = results
             .map(result => result.data)
             .filter(data => data)
@@ -777,9 +780,8 @@ self.onmessage = async function(e) {
             workerId: workerId,
             results: results,
             auditTrail: processor.auditTrail,
-            csv: processor.generateCSV(),
             errorLog: processor.generateErrorLog(),
-            verboseLogs: processor.verboseLogs,
+            verboseLog: processor.verboseLog,
             skippedFiles: skippedFiles
         }, transferables);
     } else {
