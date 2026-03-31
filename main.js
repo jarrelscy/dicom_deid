@@ -604,8 +604,16 @@ class DicomDeidentifier {
     }
     
     handleWorkerMessage(event, workerId) {
+        // In folder mode, processWithWorkersQueue manages all progress and
+        // completion via per-batch addEventListener handlers. The onmessage
+        // handler must be a no-op here to avoid double-counting: the worker
+        // sends one PROGRESS message per file (which would increment
+        // processedFiles via updateProgress()) plus one COMPLETE per batch
+        // (which handleWorkerComplete would mishandle).
+        if (this.processingMode === 'folder') return;
+
         const { type } = event.data;
-        
+
         if (type === 'PROGRESS') {
             this.updateProgress();
         } else if (type === 'COMPLETE') {
