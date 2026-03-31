@@ -619,6 +619,11 @@ class DicomDeidentifier {
     }
     
     handleWorkerComplete(data, workerId) {
+        // In folder mode, processWithWorkersQueue manages COMPLETE messages directly
+        // via per-batch addEventListener handlers. Handling them here too causes
+        // premature termination after the first round of batches.
+        if (this.processingMode === 'folder') return;
+
         console.log('Worker', workerId, 'completed with data:', data);
         
         if (data.results) {
