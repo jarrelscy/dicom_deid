@@ -18,6 +18,7 @@ class DicomDeidentifier {
 
         // Memory management: max files per worker batch and max total in-flight
         this.BATCH_SIZE = 50;   // files per worker batch dispatch
+        this.aborted = false;
 
         // File System Access API variables
         this.processingMode = 'zip'; // 'zip' or 'folder'
@@ -51,6 +52,7 @@ class DicomDeidentifier {
         this.errorSection = document.getElementById('errorSection');
         this.errorText = document.getElementById('errorText');
         this.resetBtn = document.getElementById('resetBtn');
+        this.cancelBtn = document.getElementById('cancelBtn');
         
         // Folder mode elements
         this.zipModeBtn = document.getElementById('zipModeBtn');
@@ -149,6 +151,17 @@ class DicomDeidentifier {
         this.resetBtn.addEventListener('click', () => {
             this.reset();
         });
+
+        // Cancel button — sets abort flag; workers finish current batch then
+        // finalizeStreamingResults() saves the audit for what was done so far
+        if (this.cancelBtn) {
+            this.cancelBtn.addEventListener('click', () => {
+                this.aborted = true;
+                this.cancelBtn.disabled = true;
+                this.cancelBtn.textContent = 'Cancelling…';
+                this.updateProgress('Cancelling — finishing current batch…', null);
+            });
+        }
         
         // Mode buttons
         if (this.zipModeBtn) {
@@ -372,7 +385,13 @@ class DicomDeidentifier {
 
     async processFiles() {
         try {
+            this.aborted = false;
             this.showProgress();
+            if (this.cancelBtn) {
+                this.cancelBtn.style.display = 'block';
+                this.cancelBtn.disabled = false;
+                this.cancelBtn.textContent = 'Cancel & Save Audit';
+            }
             
             // Get selected SOPClassUIDs
             const allowedSOPClassUIDs = this.getSelectedSOPClassUIDs();
@@ -1061,6 +1080,7 @@ class DicomDeidentifier {
         // Each worker runs a loop: pull next batch → dispatch → wait → repeat
         const runWorker = async (worker, workerIndex) => {
             while (true) {
+                if (this.aborted) break; // abort before reading next batch
                 const batch = await prepareNextBatch();
                 if (!batch) break; // No more files
                 await dispatchBatch(worker, batch, workerIndex);
@@ -1070,11 +1090,15 @@ class DicomDeidentifier {
             }
         };
 
-        // Run all workers concurrently; each pulls batches sequentially from the shared queue
-        await Promise.all(this.workers.map((worker, i) => runWorker(worker, i)));
-
-        // All workers done — finalize
-        await this.finalizeStreamingResults();
+        // Run all workers concurrently; each pulls batches sequentially from the shared queue.
+        // The finally block guarantees finalizeStreamingResults() runs whether processing
+        // completes normally, is aborted, or throws — so the audit CSV is always saved.
+        try {
+            await Promise.all(this.workers.map((worker, i) => runWorker(worker, i)));
+        } finally {
+            this.terminateWorkers();
+            await this.finalizeStreamingResults();
+        }
     }
 
     async saveProcessedFile(result) {
@@ -1149,25 +1173,32 @@ class DicomDeidentifier {
             await logWritable.close();
             // Output log saved
             
-            // Show completion message
+            // Hide cancel button — we're done regardless of how we got here
+            if (this.cancelBtn) this.cancelBtn.style.display = 'none';
+
+            // Show completion message — distinguish normal, aborted, and partial (crash)
             const successCount = this.results.filter(r => r.success).length;
             const failureCount = this.results.filter(r => !r.success).length;
-            
+            const heading = this.aborted
+                ? '<strong>Cancelled — partial results saved</strong>'
+                : `<strong>Processing Complete!</strong>`;
+
             this.resultsText.innerHTML = `
-                <strong>Processing Complete!</strong><br>
-                Successfully processed: ${successCount} files<br>
+                ${heading}<br>
+                Successfully processed: ${successCount} of ${this.totalFiles} files<br>
                 ${failureCount > 0 ? `Failed: ${failureCount} files<br>` : ''}
-                ${this.skippedFiles > 0 ? `Skipped due to SOPClassUID filtering: ${this.skippedFiles} files<br>` : ''}
+                ${this.skippedFiles > 0 ? `Skipped (SOPClassUID filter): ${this.skippedFiles} files<br>` : ''}
                 Files saved to: ${this.outputDirectoryHandle.name}<br>
                 CSV audit trail: deidentification_audit.csv<br>
                 Processing log: output.log<br>
             `;
-            
+
             this.progressSection.style.display = 'none';
             this.resultsSection.style.display = 'block';
             this.downloadBtn.style.display = 'none'; // No download needed in folder mode
-            
+
         } catch (error) {
+            if (this.cancelBtn) this.cancelBtn.style.display = 'none';
             this.showError('Error finalizing results: ' + error.message);
         }
     }
@@ -1202,6 +1233,8 @@ class DicomDeidentifier {
         this.auditTrails = [];
         this.errorLogs = [];
         this.skippedFiles = 0;
+        this.aborted = false;
+        if (this.cancelBtn) this.cancelBtn.style.display = 'none';
         
         // Reset folder paths
         if (this.inputFolderPath) {

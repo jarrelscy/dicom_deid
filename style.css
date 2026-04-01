@@ -140,6 +140,29 @@ main {
     transform: translateY(-2px);
 }
 
+.cancel-btn {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 16px auto 0;
+    display: block;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.cancel-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+}
+
+.cancel-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .process-btn:disabled {
     background: #ccc;
     cursor: not-allowed;
