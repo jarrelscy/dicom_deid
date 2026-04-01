@@ -13,11 +13,12 @@ class DicomDeidentifier {
         this.results = [];
         this.auditTrails = [];
         this.errorLogs = [];
-        this.verboseLogs = [];
+        this.verboseLog = '';
         this.completedWorkers = 0;
 
         // Memory management: max files per worker batch and max total in-flight
         this.BATCH_SIZE = 50;   // files per worker batch dispatch
+        this.aborted = false;
 
         // File System Access API variables
         this.processingMode = 'zip'; // 'zip' or 'folder'
@@ -51,6 +52,7 @@ class DicomDeidentifier {
         this.errorSection = document.getElementById('errorSection');
         this.errorText = document.getElementById('errorText');
         this.resetBtn = document.getElementById('resetBtn');
+        this.cancelBtn = document.getElementById('cancelBtn');
         
         // Folder mode elements
         this.zipModeBtn = document.getElementById('zipModeBtn');
@@ -149,6 +151,17 @@ class DicomDeidentifier {
         this.resetBtn.addEventListener('click', () => {
             this.reset();
         });
+
+        // Cancel button — sets abort flag; workers finish current batch then
+        // finalizeStreamingResults() saves the audit for what was done so far
+        if (this.cancelBtn) {
+            this.cancelBtn.addEventListener('click', () => {
+                this.aborted = true;
+                this.cancelBtn.disabled = true;
+                this.cancelBtn.textContent = 'Cancelling…';
+                this.updateProgress('Cancelling — finishing current batch…', null);
+            });
+        }
         
         // Mode buttons
         if (this.zipModeBtn) {
@@ -372,7 +385,13 @@ class DicomDeidentifier {
 
     async processFiles() {
         try {
+            this.aborted = false;
             this.showProgress();
+            if (this.cancelBtn) {
+                this.cancelBtn.style.display = 'block';
+                this.cancelBtn.disabled = false;
+                this.cancelBtn.textContent = 'Cancel & Save Audit';
+            }
             
             // Get selected SOPClassUIDs
             const allowedSOPClassUIDs = this.getSelectedSOPClassUIDs();
@@ -604,8 +623,16 @@ class DicomDeidentifier {
     }
     
     handleWorkerMessage(event, workerId) {
+        // In folder mode, processWithWorkersQueue manages all progress and
+        // completion via per-batch addEventListener handlers. The onmessage
+        // handler must be a no-op here to avoid double-counting: the worker
+        // sends one PROGRESS message per file (which would increment
+        // processedFiles via updateProgress()) plus one COMPLETE per batch
+        // (which handleWorkerComplete would mishandle).
+        if (this.processingMode === 'folder') return;
+
         const { type } = event.data;
-        
+
         if (type === 'PROGRESS') {
             this.updateProgress();
         } else if (type === 'COMPLETE') {
@@ -619,6 +646,11 @@ class DicomDeidentifier {
     }
     
     handleWorkerComplete(data, workerId) {
+        // In folder mode, processWithWorkersQueue manages COMPLETE messages directly
+        // via per-batch addEventListener handlers. Handling them here too causes
+        // premature termination after the first round of batches.
+        if (this.processingMode === 'folder') return;
+
         console.log('Worker', workerId, 'completed with data:', data);
         
         if (data.results) {
@@ -628,11 +660,8 @@ class DicomDeidentifier {
             this.auditTrails = this.auditTrails.concat(data.auditTrail);
         }
         
-        if (data.verboseLogs) {
-            console.log(`ZIP mode: Received ${data.verboseLogs.length} verbose logs from worker ${workerId}, total now: ${this.verboseLogs.length + data.verboseLogs.length}`);
-            this.verboseLogs = this.verboseLogs.concat(data.verboseLogs);
-        } else {
-            console.log(`ZIP mode: No verbose logs received from worker ${workerId}`);
+        if (data.verboseLog) {
+            this.verboseLog += data.verboseLog;
         }
         if (data.errorLog) {
             this.errorLogs.push(data.errorLog);
@@ -720,21 +749,12 @@ class DicomDeidentifier {
             }
         }
         
-        // Add verbose logs if enabled
-        if (this.verboseMode && this.verboseLogs.length > 0) {
+        if (this.verboseMode && this.verboseLog.length > 0) {
             logContent += '\n\nDetailed Tag Processing Log\n';
-            logContent += '=' .repeat(40) + '\n\n';
-            this.verboseLogs.forEach(log => {
-                logContent += `File: ${log.filename}\n`;
-                logContent += `Tag: ${log.tag} (${log.tagName})\n`;
-                logContent += `Original Value: ${log.originalValue}\n`;
-                logContent += `Action: ${log.action}\n`;
-                logContent += `New Value: ${log.newValue}\n`;
-                logContent += `Time: ${log.timestamp}\n`;
-                logContent += '-'.repeat(50) + '\n';
-            });
+            logContent += '='.repeat(40) + '\n';
+            logContent += this.verboseLog;
         }
-        
+
         zip.file('output.log', logContent);
         
         return await zip.generateAsync({
@@ -856,7 +876,7 @@ class DicomDeidentifier {
                 const worker = this.workers[index];
                 
                 worker.onmessage = async (e) => {
-                    const { type, workerId, results, auditTrail, skippedFiles, verboseLogs, errorLog } = e.data;
+                    const { type, workerId, results, auditTrail, skippedFiles, verboseLog, errorLog } = e.data;
                     // Worker message received
                     
                     if (type === 'COMPLETE') {
@@ -881,9 +901,8 @@ class DicomDeidentifier {
                         }
                         this.auditTrails.push(...(auditTrail || []));
                         
-                        // Collect verbose logs if available
-                        if (verboseLogs && verboseLogs.length > 0) {
-                            this.verboseLogs.push(...verboseLogs);
+                        if (verboseLog) {
+                            this.verboseLog += verboseLog;
                         }
                         
                         // Collect error logs if available
@@ -983,7 +1002,7 @@ class DicomDeidentifier {
                     worker.removeEventListener('message', handler);
                     worker.removeEventListener('error', errHandler);
 
-                    const { results, auditTrail, verboseLogs, errorLog, skippedFiles } = e.data;
+                    const { results, auditTrail, verboseLog, errorLog, skippedFiles } = e.data;
 
                     // MM-02: Save to disk immediately, then null out data to free RAM
                     for (const result of (results || [])) {
@@ -1015,9 +1034,8 @@ class DicomDeidentifier {
                         this.auditTrails.push(...auditTrail);
                     }
 
-                    // Collect verbose logs if enabled
-                    if (verboseLogs && verboseLogs.length > 0) {
-                        this.verboseLogs.push(...verboseLogs);
+                    if (verboseLog) {
+                        this.verboseLog += verboseLog;
                     }
 
                     // Collect error logs
@@ -1062,6 +1080,7 @@ class DicomDeidentifier {
         // Each worker runs a loop: pull next batch → dispatch → wait → repeat
         const runWorker = async (worker, workerIndex) => {
             while (true) {
+                if (this.aborted) break; // abort before reading next batch
                 const batch = await prepareNextBatch();
                 if (!batch) break; // No more files
                 await dispatchBatch(worker, batch, workerIndex);
@@ -1071,11 +1090,15 @@ class DicomDeidentifier {
             }
         };
 
-        // Run all workers concurrently; each pulls batches sequentially from the shared queue
-        await Promise.all(this.workers.map((worker, i) => runWorker(worker, i)));
-
-        // All workers done — finalize
-        await this.finalizeStreamingResults();
+        // Run all workers concurrently; each pulls batches sequentially from the shared queue.
+        // The finally block guarantees finalizeStreamingResults() runs whether processing
+        // completes normally, is aborted, or throws — so the audit CSV is always saved.
+        try {
+            await Promise.all(this.workers.map((worker, i) => runWorker(worker, i)));
+        } finally {
+            this.terminateWorkers();
+            await this.finalizeStreamingResults();
+        }
     }
 
     async saveProcessedFile(result) {
@@ -1138,19 +1161,10 @@ class DicomDeidentifier {
                 }
             }
             
-            // Add verbose logs if enabled
-            if (this.verboseMode && this.verboseLogs.length > 0) {
+            if (this.verboseMode && this.verboseLog.length > 0) {
                 logContent += '\n\nDetailed Tag Processing Log\n';
-                logContent += '=' .repeat(40) + '\n\n';
-                this.verboseLogs.forEach(log => {
-                    logContent += `File: ${log.filename}\n`;
-                    logContent += `Tag: ${log.tag} (${log.tagName})\n`;
-                    logContent += `Original Value: ${log.originalValue}\n`;
-                    logContent += `Action: ${log.action}\n`;
-                    logContent += `New Value: ${log.newValue}\n`;
-                    logContent += `Time: ${log.timestamp}\n`;
-                    logContent += '-'.repeat(50) + '\n';
-                });
+                logContent += '='.repeat(40) + '\n';
+                logContent += this.verboseLog;
             }
             
             const logFileHandle = await this.outputDirectoryHandle.getFileHandle('output.log', { create: true });
@@ -1159,25 +1173,32 @@ class DicomDeidentifier {
             await logWritable.close();
             // Output log saved
             
-            // Show completion message
+            // Hide cancel button — we're done regardless of how we got here
+            if (this.cancelBtn) this.cancelBtn.style.display = 'none';
+
+            // Show completion message — distinguish normal, aborted, and partial (crash)
             const successCount = this.results.filter(r => r.success).length;
             const failureCount = this.results.filter(r => !r.success).length;
-            
+            const heading = this.aborted
+                ? '<strong>Cancelled — partial results saved</strong>'
+                : `<strong>Processing Complete!</strong>`;
+
             this.resultsText.innerHTML = `
-                <strong>Processing Complete!</strong><br>
-                Successfully processed: ${successCount} files<br>
+                ${heading}<br>
+                Successfully processed: ${successCount} of ${this.totalFiles} files<br>
                 ${failureCount > 0 ? `Failed: ${failureCount} files<br>` : ''}
-                ${this.skippedFiles > 0 ? `Skipped due to SOPClassUID filtering: ${this.skippedFiles} files<br>` : ''}
+                ${this.skippedFiles > 0 ? `Skipped (SOPClassUID filter): ${this.skippedFiles} files<br>` : ''}
                 Files saved to: ${this.outputDirectoryHandle.name}<br>
                 CSV audit trail: deidentification_audit.csv<br>
                 Processing log: output.log<br>
             `;
-            
+
             this.progressSection.style.display = 'none';
             this.resultsSection.style.display = 'block';
             this.downloadBtn.style.display = 'none'; // No download needed in folder mode
-            
+
         } catch (error) {
+            if (this.cancelBtn) this.cancelBtn.style.display = 'none';
             this.showError('Error finalizing results: ' + error.message);
         }
     }
@@ -1212,6 +1233,8 @@ class DicomDeidentifier {
         this.auditTrails = [];
         this.errorLogs = [];
         this.skippedFiles = 0;
+        this.aborted = false;
+        if (this.cancelBtn) this.cancelBtn.style.display = 'none';
         
         // Reset folder paths
         if (this.inputFolderPath) {
