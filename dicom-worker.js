@@ -9,6 +9,9 @@ const baseUrl = self.location.href.substring(0, self.location.href.lastIndexOf('
 importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
+importScripts('https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js');
+
+let codecsInitPromise = null;
 
 // DICOM tag whitelist - only these tags will be kept
 const WHITELISTED_TAGS = {
@@ -105,12 +108,13 @@ const SCRAMBLE_TIME_TAGS = ['00080030', '00080031', '00080032', '00080033'];
 const SCRAMBLE_TEXT_TAGS = ['00080050', '00100010', '00100020', '00080080'];
 
 class DicomProcessor {
-    constructor(passphrase, tagConfigurations = {}, verboseMode = false) {
+    constructor(passphrase, tagConfigurations = {}, verboseMode = false, decompressMode = false) {
         this.scrambler = new DicomScrambler(passphrase);
         this.auditTrail = [];
         this.errorLog = [];
         this.tagConfigurations = tagConfigurations;
         this.verboseMode = verboseMode;
+        this.decompressMode = decompressMode;
         // Pre-formatted string instead of array-of-objects: avoids per-tag object
         // allocation overhead (8M+ objects for large datasets) and redundant filename
         // storage. Timestamp is emitted once per file, not once per tag.
@@ -308,12 +312,56 @@ class DicomProcessor {
         }
     }
 
+
+
+    async ensureCodecsInitialized() {
+        if (!codecsInitPromise) {
+            const nativeCodecs = self.dcmjsCodecs?.NativeCodecs;
+            if (!nativeCodecs || typeof nativeCodecs.initializeAsync !== 'function') {
+                throw new Error('dcmjs-codecs NativeCodecs.initializeAsync is unavailable');
+            }
+            codecsInitPromise = nativeCodecs.initializeAsync({ logCodecsInfo: false, logCodecsTrace: false });
+        }
+        return codecsInitPromise;
+    }
+
+    async decompressIfRequested(arrayBuffer, filename) {
+        if (!this.decompressMode) return { arrayBuffer, transferSyntax: null, decompressed: false };
+
+        const parsed = dcmjs.data.DicomMessage.readFile(arrayBuffer);
+        const transferSyntax = this.getTagValue(parsed.meta, '00020010');
+        if (!transferSyntax || transferSyntax === '1.2.840.10008.1.2.1') {
+            return { arrayBuffer, transferSyntax, decompressed: false };
+        }
+
+        await this.ensureCodecsInitialized();
+
+        const transferrer = self.dcmjsCodecs?.Transcoder;
+        const explicitLE = self.dcmjsCodecs?.constants?.TransferSyntax?.ExplicitVRLittleEndian || '1.2.840.10008.1.2.1';
+
+        if (!transferrer) {
+            throw new Error('dcmjs-codecs Transcoder is unavailable');
+        }
+
+        try {
+            const transcoder = new transferrer(arrayBuffer);
+            transcoder.transcode(explicitLE);
+            const decompressedBuffer = transcoder.getDicomPart10();
+            this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS', '1.2.840.10008.1.2.1');
+            return { arrayBuffer: decompressedBuffer, transferSyntax, decompressed: true };
+        } catch (e) {
+            this.logError(filename, 'DECOMPRESS_ERROR', e.message);
+            throw new Error(`Unable to decompress pixel data: ${e.message}`);
+        }
+    }
+
     async processDicomFile(arrayBuffer, filename) {
         // Processing DICOM file
         try {
             // Parse DICOM file
             // Parsing DICOM data
-            const dataSet = dcmjs.data.DicomMessage.readFile(arrayBuffer);
+            const decompressResult = await this.decompressIfRequested(arrayBuffer, filename);
+            const dataSet = dcmjs.data.DicomMessage.readFile(decompressResult.arrayBuffer);
             const dict = dataSet.dict;
             // DICOM data parsed
             
@@ -710,17 +758,17 @@ self.onmessage = async function(e) {
     const { type } = e.data;
     
     if (type === 'PROCESS_FILES' || type === 'PROCESS_CHUNK') {
-        let files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode;
+        let files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode, decompressMode;
         
         if (type === 'PROCESS_FILES') {
-            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode } = e.data.data);
+            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode, decompressMode } = e.data.data);
         } else {
-            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode } = e.data);
+            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode, decompressMode } = e.data);
         }
         
         // Worker starting file processing
         // SOPClassUIDs configured
-        const processor = new DicomProcessor(passphrase, tagConfigurations, verboseMode);
+        const processor = new DicomProcessor(passphrase, tagConfigurations, verboseMode, decompressMode);
         const results = [];
         let skippedFiles = 0;
         
