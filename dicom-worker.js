@@ -9,7 +9,8 @@ const baseUrl = self.location.href.substring(0, self.location.href.lastIndexOf('
 importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
-importScripts('https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js');
+const DCMJS_CODECS_BASE_URL = 'https://cdn.jsdelivr.net/npm/dcmjs-codecs@0.0.6/build';
+importScripts(`${DCMJS_CODECS_BASE_URL}/dcmjs-codecs.min.js`);
 let codecsInitPromise = null;
 
 // DICOM tag whitelist - only these tags will be kept
@@ -319,13 +320,21 @@ class DicomProcessor {
             if (!nativeCodecs || typeof nativeCodecs.initializeAsync !== 'function') {
                 throw new Error('dcmjs-codecs NativeCodecs.initializeAsync is unavailable');
             }
-            codecsInitPromise = nativeCodecs.initializeAsync({ logCodecsInfo: false, logCodecsTrace: false });
+            codecsInitPromise = nativeCodecs.initializeAsync({
+                webAssemblyModulePathOrUrl: `${DCMJS_CODECS_BASE_URL}/dcmjs-native-codecs.wasm`,
+                logCodecsInfo: false,
+                logCodecsTrace: false
+            });
         }
         return codecsInitPromise;
     }
 
     async decompressIfRequested(arrayBuffer, filename) {
         if (!this.decompressMode) return { arrayBuffer, transferSyntax: null, decompressed: false };
+        if (!(arrayBuffer instanceof ArrayBuffer)) {
+            this.logError(filename, 'DECOMPRESS_INVALID_INPUT', 'Expected ArrayBuffer input for decompression');
+            return { arrayBuffer, transferSyntax: null, decompressed: false };
+        }
 
         const parsed = dcmjs.data.DicomMessage.readFile(arrayBuffer);
         const transferSyntax = this.getTagValue(parsed.meta, '00020010');
@@ -333,13 +342,23 @@ class DicomProcessor {
             return { arrayBuffer, transferSyntax, decompressed: false };
         }
 
-        await this.ensureCodecsInitialized();
+        try {
+            await this.ensureCodecsInitialized();
+        } catch (e) {
+            // If WASM codecs fail to load (e.g., CDN/network/CORS issues), continue
+            // processing without decompression so de-identification can still proceed.
+            this.logError(filename, 'DECOMPRESS_CODEC_INIT_ERROR', e.message);
+            this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS_SKIPPED', transferSyntax);
+            return { arrayBuffer, transferSyntax, decompressed: false };
+        }
 
         const transferrer = self.dcmjsCodecs?.Transcoder;
         const explicitLE = self.dcmjsCodecs?.constants?.TransferSyntax?.ExplicitVRLittleEndian || '1.2.840.10008.1.2.1';
 
         if (!transferrer) {
-            throw new Error('dcmjs-codecs Transcoder is unavailable');
+            this.logError(filename, 'DECOMPRESS_TRANSCODER_UNAVAILABLE', 'dcmjs-codecs Transcoder is unavailable');
+            this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS_SKIPPED', transferSyntax);
+            return { arrayBuffer, transferSyntax, decompressed: false };
         }
 
         try {
@@ -363,7 +382,6 @@ class DicomProcessor {
             const dataSet = dcmjs.data.DicomMessage.readFile(decompressResult.arrayBuffer);
             const dict = dataSet.dict;
             // DICOM data parsed
-            await this.decompressIfRequested(dataSet, filename);
             
             // Extract original values for audit trail
             // Extracting original values
