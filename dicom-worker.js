@@ -9,6 +9,7 @@ const baseUrl = self.location.href.substring(0, self.location.href.lastIndexOf('
 importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
+importScripts('https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js');
 
 // DICOM tag whitelist - only these tags will be kept
 const WHITELISTED_TAGS = {
@@ -105,12 +106,13 @@ const SCRAMBLE_TIME_TAGS = ['00080030', '00080031', '00080032', '00080033'];
 const SCRAMBLE_TEXT_TAGS = ['00080050', '00100010', '00100020', '00080080'];
 
 class DicomProcessor {
-    constructor(passphrase, tagConfigurations = {}, verboseMode = false) {
+    constructor(passphrase, tagConfigurations = {}, verboseMode = false, decompressMode = false) {
         this.scrambler = new DicomScrambler(passphrase);
         this.auditTrail = [];
         this.errorLog = [];
         this.tagConfigurations = tagConfigurations;
         this.verboseMode = verboseMode;
+        this.decompressMode = decompressMode;
         // Pre-formatted string instead of array-of-objects: avoids per-tag object
         // allocation overhead (8M+ objects for large datasets) and redundant filename
         // storage. Timestamp is emitted once per file, not once per tag.
@@ -308,6 +310,27 @@ class DicomProcessor {
         }
     }
 
+
+
+    async decompressIfRequested(dataSet, filename) {
+        if (!this.decompressMode) return;
+        const transferSyntax = this.getTagValue(dataSet.meta, '00020010');
+        if (!transferSyntax || transferSyntax === '1.2.840.10008.1.2.1') return;
+
+        try {
+            const denat = dcmjs.data.DicomMetaDictionary.naturalizeDataset(dataSet.dict);
+            denat._meta = dcmjs.data.DicomMetaDictionary.namifyDataset(dataSet.meta);
+            const codec = new dcmjsCodecs.Codec();
+            const decoded = codec.decode(denat, transferSyntax, '1.2.840.10008.1.2.1');
+            const renat = dcmjs.data.DicomMetaDictionary.denaturalizeDataset(decoded);
+            dataSet.dict = renat;
+            dataSet.meta['00020010'] = { vr: 'UI', Value: ['1.2.840.10008.1.2.1'] };
+            this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS', '1.2.840.10008.1.2.1');
+        } catch (e) {
+            this.logError(filename, 'DECOMPRESS_ERROR', e.message);
+            throw new Error(`Unable to decompress pixel data: ${e.message}`);
+        }
+    }
     async processDicomFile(arrayBuffer, filename) {
         // Processing DICOM file
         try {
@@ -316,6 +339,7 @@ class DicomProcessor {
             const dataSet = dcmjs.data.DicomMessage.readFile(arrayBuffer);
             const dict = dataSet.dict;
             // DICOM data parsed
+            await this.decompressIfRequested(dataSet, filename);
             
             // Extract original values for audit trail
             // Extracting original values
@@ -710,17 +734,17 @@ self.onmessage = async function(e) {
     const { type } = e.data;
     
     if (type === 'PROCESS_FILES' || type === 'PROCESS_CHUNK') {
-        let files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode;
+        let files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode, decompressMode;
         
         if (type === 'PROCESS_FILES') {
-            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode } = e.data.data);
+            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode, decompressMode } = e.data.data);
         } else {
-            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode } = e.data);
+            ({ files, passphrase, workerId, allowedSOPClassUIDs, tagConfigurations, verboseMode, decompressMode } = e.data);
         }
         
         // Worker starting file processing
         // SOPClassUIDs configured
-        const processor = new DicomProcessor(passphrase, tagConfigurations, verboseMode);
+        const processor = new DicomProcessor(passphrase, tagConfigurations, verboseMode, decompressMode);
         const results = [];
         let skippedFiles = 0;
         

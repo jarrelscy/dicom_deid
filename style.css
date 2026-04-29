@@ -140,6 +140,18 @@ main {
     transform: translateY(-2px);
 }
 
+
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 30px;
+}
+
+.action-buttons .process-btn {
+    margin: 0;
+}
 .cancel-btn {
     background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
     color: white;

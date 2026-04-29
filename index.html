@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="jszip.min.js"></script>
     <script src="dcmjs.min.js"></script>
+    <script src="https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -165,12 +166,22 @@
                     </div>
                 </div>
 
+                <div class="action-buttons">
                 <button id="processBtn" class="process-btn" disabled>
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5,3 19,12 5,21 5,3"/>
                     </svg>
                     Process DICOM Files
                 </button>
+                <button id="decompressBtn" class="process-btn" disabled>
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3v12"/>
+                        <polyline points="7,11 12,16 17,11"/>
+                        <rect x="4" y="17" width="16" height="4" rx="1"/>
+                    </svg>
+                    Decompress + Process DICOM Files
+                </button>
+                </div>
             </div>
 
             <div class="progress-section" id="progressSection" style="display: none;">
@@ -186,6 +197,7 @@
                 <button id="cancelBtn" class="cancel-btn" style="display: none;">
                     Cancel &amp; Save Audit
                 </button>
+                </div>
             </div>
 
             <div class="results-section" id="resultsSection" style="display: none;">
