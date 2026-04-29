@@ -9,7 +9,8 @@ const baseUrl = self.location.href.substring(0, self.location.href.lastIndexOf('
 importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
-importScripts('https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js');
+const DCMJS_CODECS_BASE_URL = 'https://cdn.jsdelivr.net/npm/dcmjs-codecs@0.0.6/build';
+importScripts(`${DCMJS_CODECS_BASE_URL}/dcmjs-codecs.min.js`);
 let codecsInitPromise = null;
 
 // DICOM tag whitelist - only these tags will be kept
@@ -319,7 +320,11 @@ class DicomProcessor {
             if (!nativeCodecs || typeof nativeCodecs.initializeAsync !== 'function') {
                 throw new Error('dcmjs-codecs NativeCodecs.initializeAsync is unavailable');
             }
-            codecsInitPromise = nativeCodecs.initializeAsync({ logCodecsInfo: false, logCodecsTrace: false });
+            codecsInitPromise = nativeCodecs.initializeAsync({
+                webAssemblyModulePathOrUrl: `${DCMJS_CODECS_BASE_URL}/dcmjs-native-codecs.wasm`,
+                logCodecsInfo: false,
+                logCodecsTrace: false
+            });
         }
         return codecsInitPromise;
     }
