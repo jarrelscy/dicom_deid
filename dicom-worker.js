@@ -326,6 +326,10 @@ class DicomProcessor {
 
     async decompressIfRequested(arrayBuffer, filename) {
         if (!this.decompressMode) return { arrayBuffer, transferSyntax: null, decompressed: false };
+        if (!(arrayBuffer instanceof ArrayBuffer)) {
+            this.logError(filename, 'DECOMPRESS_INVALID_INPUT', 'Expected ArrayBuffer input for decompression');
+            return { arrayBuffer, transferSyntax: null, decompressed: false };
+        }
 
         const parsed = dcmjs.data.DicomMessage.readFile(arrayBuffer);
         const transferSyntax = this.getTagValue(parsed.meta, '00020010');
@@ -373,7 +377,6 @@ class DicomProcessor {
             const dataSet = dcmjs.data.DicomMessage.readFile(decompressResult.arrayBuffer);
             const dict = dataSet.dict;
             // DICOM data parsed
-            await this.decompressIfRequested(dataSet, filename);
             
             // Extract original values for audit trail
             // Extracting original values
