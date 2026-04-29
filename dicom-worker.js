@@ -10,6 +10,7 @@ importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
 importScripts('https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js');
+let codecsInitPromise = null;
 
 // DICOM tag whitelist - only these tags will be kept
 const WHITELISTED_TAGS = {
@@ -312,31 +313,54 @@ class DicomProcessor {
 
 
 
-    async decompressIfRequested(dataSet, filename) {
-        if (!this.decompressMode) return;
-        const transferSyntax = this.getTagValue(dataSet.meta, '00020010');
-        if (!transferSyntax || transferSyntax === '1.2.840.10008.1.2.1') return;
+    async ensureCodecsInitialized() {
+        if (!codecsInitPromise) {
+            const nativeCodecs = self.dcmjsCodecs?.NativeCodecs;
+            if (!nativeCodecs || typeof nativeCodecs.initializeAsync !== 'function') {
+                throw new Error('dcmjs-codecs NativeCodecs.initializeAsync is unavailable');
+            }
+            codecsInitPromise = nativeCodecs.initializeAsync({ logCodecsInfo: false, logCodecsTrace: false });
+        }
+        return codecsInitPromise;
+    }
+
+    async decompressIfRequested(arrayBuffer, filename) {
+        if (!this.decompressMode) return { arrayBuffer, transferSyntax: null, decompressed: false };
+
+        const parsed = dcmjs.data.DicomMessage.readFile(arrayBuffer);
+        const transferSyntax = this.getTagValue(parsed.meta, '00020010');
+        if (!transferSyntax || transferSyntax === '1.2.840.10008.1.2.1') {
+            return { arrayBuffer, transferSyntax, decompressed: false };
+        }
+
+        await this.ensureCodecsInitialized();
+
+        const transferrer = self.dcmjsCodecs?.Transcoder;
+        const explicitLE = self.dcmjsCodecs?.constants?.TransferSyntax?.ExplicitVRLittleEndian || '1.2.840.10008.1.2.1';
+
+        if (!transferrer) {
+            throw new Error('dcmjs-codecs Transcoder is unavailable');
+        }
 
         try {
-            const denat = dcmjs.data.DicomMetaDictionary.naturalizeDataset(dataSet.dict);
-            denat._meta = dcmjs.data.DicomMetaDictionary.namifyDataset(dataSet.meta);
-            const codec = new dcmjsCodecs.Codec();
-            const decoded = codec.decode(denat, transferSyntax, '1.2.840.10008.1.2.1');
-            const renat = dcmjs.data.DicomMetaDictionary.denaturalizeDataset(decoded);
-            dataSet.dict = renat;
-            dataSet.meta['00020010'] = { vr: 'UI', Value: ['1.2.840.10008.1.2.1'] };
+            const transcoder = new transferrer(arrayBuffer);
+            transcoder.transcode(explicitLE);
+            const decompressedBuffer = transcoder.getDicomPart10();
             this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS', '1.2.840.10008.1.2.1');
+            return { arrayBuffer: decompressedBuffer, transferSyntax, decompressed: true };
         } catch (e) {
             this.logError(filename, 'DECOMPRESS_ERROR', e.message);
             throw new Error(`Unable to decompress pixel data: ${e.message}`);
         }
     }
+
     async processDicomFile(arrayBuffer, filename) {
         // Processing DICOM file
         try {
             // Parse DICOM file
             // Parsing DICOM data
-            const dataSet = dcmjs.data.DicomMessage.readFile(arrayBuffer);
+            const decompressResult = await this.decompressIfRequested(arrayBuffer, filename);
+            const dataSet = dcmjs.data.DicomMessage.readFile(decompressResult.arrayBuffer);
             const dict = dataSet.dict;
             // DICOM data parsed
             await this.decompressIfRequested(dataSet, filename);
