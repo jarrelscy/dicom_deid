@@ -15,6 +15,7 @@ class DicomDeidentifier {
         this.errorLogs = [];
         this.verboseLog = '';
         this.completedWorkers = 0;
+        this.decompressMode = false;
 
         // Memory management: max files per worker batch and max total in-flight
         this.BATCH_SIZE = 50;   // files per worker batch dispatch
@@ -41,6 +42,7 @@ class DicomDeidentifier {
         this.uploadArea = document.getElementById('uploadArea');
         this.fileInput = document.getElementById('fileInput');
         this.processBtn = document.getElementById('processBtn');
+        this.decompressBtn = document.getElementById('decompressBtn');
         this.progressSection = document.getElementById('progressSection');
         this.progressFill = document.getElementById('progressFill');
         this.progressText = document.getElementById('progressText');
@@ -139,6 +141,11 @@ class DicomDeidentifier {
         
         // Process button
         this.processBtn.addEventListener('click', () => {
+            this.decompressMode = false;
+            this.processFiles();
+        });
+        this.decompressBtn.addEventListener('click', () => {
+            this.decompressMode = true;
             this.processFiles();
         });
         
@@ -289,6 +296,7 @@ class DicomDeidentifier {
         }
         
         this.processBtn.disabled = !canProcess;
+        this.decompressBtn.disabled = !canProcess;
     }
     
     switchToMode(mode) {
@@ -613,7 +621,8 @@ class DicomDeidentifier {
                         workerId: index,
                         allowedSOPClassUIDs: this.allowedSOPClassUIDs,
                         tagConfigurations: this.tagConfigurations,
-                        verboseMode: this.verboseMode
+                        verboseMode: this.verboseMode,
+                    decompressMode: this.decompressMode
                     }
                 }, transferables);
             }
@@ -946,7 +955,8 @@ class DicomDeidentifier {
                     workerId: index,
                     allowedSOPClassUIDs: this.allowedSOPClassUIDs,
                     tagConfigurations: this.tagConfigurations,
-                    verboseMode: this.verboseMode
+                    verboseMode: this.verboseMode,
+                    decompressMode: this.decompressMode
                 }, transferables);
             });
         });
@@ -1072,7 +1082,8 @@ class DicomDeidentifier {
                     workerId: workerIndex,
                     allowedSOPClassUIDs: this.allowedSOPClassUIDs,
                     tagConfigurations: this.tagConfigurations,
-                    verboseMode: this.verboseMode
+                    verboseMode: this.verboseMode,
+                    decompressMode: this.decompressMode
                 }, transferables);
             });
         };
