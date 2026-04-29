@@ -333,13 +333,23 @@ class DicomProcessor {
             return { arrayBuffer, transferSyntax, decompressed: false };
         }
 
-        await this.ensureCodecsInitialized();
+        try {
+            await this.ensureCodecsInitialized();
+        } catch (e) {
+            // If WASM codecs fail to load (e.g., CDN/network/CORS issues), continue
+            // processing without decompression so de-identification can still proceed.
+            this.logError(filename, 'DECOMPRESS_CODEC_INIT_ERROR', e.message);
+            this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS_SKIPPED', transferSyntax);
+            return { arrayBuffer, transferSyntax, decompressed: false };
+        }
 
         const transferrer = self.dcmjsCodecs?.Transcoder;
         const explicitLE = self.dcmjsCodecs?.constants?.TransferSyntax?.ExplicitVRLittleEndian || '1.2.840.10008.1.2.1';
 
         if (!transferrer) {
-            throw new Error('dcmjs-codecs Transcoder is unavailable');
+            this.logError(filename, 'DECOMPRESS_TRANSCODER_UNAVAILABLE', 'dcmjs-codecs Transcoder is unavailable');
+            this.logVerbose(filename, '00020010', 'TransferSyntaxUID', transferSyntax, 'DECOMPRESS_SKIPPED', transferSyntax);
+            return { arrayBuffer, transferSyntax, decompressed: false };
         }
 
         try {
