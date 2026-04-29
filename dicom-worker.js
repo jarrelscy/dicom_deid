@@ -10,7 +10,6 @@ importScripts(baseUrl + '/jszip.min.js');
 importScripts(baseUrl + '/dcmjs.min.js');
 importScripts(baseUrl + '/scrambler.js');
 importScripts('https://unpkg.com/dcmjs-codecs@0.0.6/build/dcmjs-codecs.min.js');
-
 let codecsInitPromise = null;
 
 // DICOM tag whitelist - only these tags will be kept
@@ -364,6 +363,7 @@ class DicomProcessor {
             const dataSet = dcmjs.data.DicomMessage.readFile(decompressResult.arrayBuffer);
             const dict = dataSet.dict;
             // DICOM data parsed
+            await this.decompressIfRequested(dataSet, filename);
             
             // Extract original values for audit trail
             // Extracting original values
