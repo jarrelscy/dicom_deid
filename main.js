@@ -22,7 +22,7 @@ class DicomDeidentifier {
         this.aborted = false;
 
         // File System Access API variables
-        this.processingMode = 'zip'; // 'zip' or 'folder'
+        this.processingMode = 'folder'; // 'zip' or 'folder'
         this.inputDirectoryHandle = null;
         this.outputDirectoryHandle = null;
         this.fileSystemSupported = 'showDirectoryPicker' in window;

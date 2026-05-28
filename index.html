@@ -27,7 +27,7 @@
                 <div class="form-group">
                     <label for="passphrase">Enter Passphrase:</label>
                     <input type="password" id="passphrase" placeholder="Enter secure passphrase" required>
-                    <small>This passphrase will be used to deterministically scramble sensitive data</small>
+                    <small>Using this passphrase will allow you to scramble this data the exact same way in future</small>
                 </div>
 
                 <div class="form-group">
@@ -39,11 +39,14 @@
                 </div>
 
                 <div class="mode-selector">
-                    <button id="zipModeBtn" class="mode-btn active">ZIP Mode</button>
-                    <button id="folderModeBtn" class="mode-btn">Folder Mode</button>
+                    <button id="zipModeBtn" class="mode-btn">ZIP Mode</button>
+                    <button id="folderModeBtn" class="mode-btn active">Folder Mode</button>
                 </div>
-                
-                <div id="zipMode" class="upload-mode">
+
+                <div id="zipMode" class="upload-mode" style="display: none;">
+                    <div class="zip-size-warning">
+                        <p><strong>Heads up:</strong> Do not use ZIP mode for any files over 2&nbsp;GB. Use Folder mode instead.</p>
+                    </div>
                     <div class="file-upload" id="fileUpload">
                         <div class="upload-area" id="uploadArea">
                             <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -58,7 +61,7 @@
                     </div>
                 </div>
                 
-                <div id="folderMode" class="upload-mode" style="display: none;">
+                <div id="folderMode" class="upload-mode">
                     <div class="folder-selection">
                         <div class="folder-item">
                             <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

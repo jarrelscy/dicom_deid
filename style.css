@@ -477,6 +477,20 @@ main {
     font-size: 0.9rem;
 }
 
+.zip-size-warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 15px;
+}
+
+.zip-size-warning p {
+    margin: 0;
+    color: #856404;
+    font-size: 0.9rem;
+}
+
 footer {
     text-align: center;
     padding: 20px 0;
