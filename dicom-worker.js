@@ -497,7 +497,17 @@ class DicomProcessor {
                             if (studySourceUID) {
                                 const vr = this.getVRForTag(tag);
                                 const maxLength = this.getVRMaxLength(vr);
-                                const generatedValue = await this.scrambler.scrambleFromStudyUID(studySourceUID, maxLength);
+                                // If notPresentValue is provided it acts as a static prefix; the
+                                // study-derived portion is then truncated to 8 chars so the result
+                                // is e.g. "PatientAB4CD8FG" rather than a 16+ char opaque string.
+                                const prefix = config.notPresentValue || '';
+                                const hashLength = prefix
+                                    ? Math.max(0, Math.min(8, maxLength - prefix.length))
+                                    : maxLength;
+                                const hashPortion = hashLength > 0
+                                    ? await this.scrambler.scrambleFromStudyUID(studySourceUID, hashLength)
+                                    : '';
+                                const generatedValue = (prefix + hashPortion).substr(0, maxLength);
                                 if (generatedValue) {
                                     if (!dict[tag]) {
                                         dict[tag] = { vr: vr, Value: [] };

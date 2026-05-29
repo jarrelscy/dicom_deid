@@ -38,7 +38,7 @@ class DicomDeidentifier {
         // Get DOM elements
         this.passphraseInput = document.getElementById('passphrase');
         this.verboseModeInput = document.getElementById('verboseMode');
-        this.verboseMode = false;
+        this.verboseMode = this.verboseModeInput.checked;
         this.uploadArea = document.getElementById('uploadArea');
         this.fileInput = document.getElementById('fileInput');
         this.processBtn = document.getElementById('processBtn');
@@ -1300,7 +1300,7 @@ class DicomDeidentifier {
             '00080018': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'SOP Instance UID' },
             '00080050': { ifPresent: 'scramble', ifNotPresent: 'scrambleFromStudyUID', presentValue: '', notPresentValue: '', description: 'Accession Number' },
             '00100010': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'ANONYMOUS^PATIENT', description: 'Patient Name' },
-            '00100020': { ifPresent: 'scramble', ifNotPresent: 'scrambleFromStudyUID', presentValue: '', notPresentValue: '', description: 'Patient ID' },
+            '00100020': { ifPresent: 'scramble', ifNotPresent: 'scrambleFromStudyUID', presentValue: '', notPresentValue: 'Patient', description: 'Patient ID' },
             '00100030': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: '19000101', description: 'Patient Birth Date' },
             '00100040': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'F', description: 'Patient Sex' },
             '00101010': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Patient Age' },
@@ -1361,9 +1361,9 @@ class DicomDeidentifier {
                             <option value="scrambleFromStudyUID" ${config.ifNotPresent === 'scrambleFromStudyUID' ? 'selected' : ''}>Generate from Study UID</option>
                             <option value="replace" ${config.ifNotPresent === 'replace' ? 'selected' : ''}>Add Value</option>
                         </select>
-                        <input type="text" class="replace-value" data-tag="${tag}" data-scenario="notpresent" 
-                               placeholder="Add value..." value="${config.notPresentValue}"
-                               ${config.ifNotPresent !== 'replace' ? 'style="display:none"' : ''}>
+                        <input type="text" class="replace-value" data-tag="${tag}" data-scenario="notpresent"
+                               placeholder="${config.ifNotPresent === 'scrambleFromStudyUID' ? 'Optional prefix…' : 'Add value...'}" value="${config.notPresentValue}"
+                               ${(config.ifNotPresent !== 'replace' && config.ifNotPresent !== 'scrambleFromStudyUID') ? 'style="display:none"' : ''}>
                     </div>
                 </div>
             `;
@@ -1390,10 +1390,12 @@ class DicomDeidentifier {
                     this.tagConfigurations[tag].ifNotPresent = value;
                 }
                 
-                // Show/hide replace value input
+                // Show/hide replace value input — also visible for scrambleFromStudyUID
+                // (where it acts as an optional static prefix, e.g. "Patient" → "PatientAB4CD8FG")
                 const replaceInput = e.target.parentElement.querySelector('.replace-value');
-                if (value === 'replace') {
+                if (value === 'replace' || value === 'scrambleFromStudyUID') {
                     replaceInput.style.display = 'block';
+                    replaceInput.placeholder = value === 'scrambleFromStudyUID' ? 'Optional prefix…' : 'Add value...';
                 } else {
                     replaceInput.style.display = 'none';
                 }
