@@ -386,8 +386,14 @@ class DicomProcessor {
             // Extract original values for audit trail
             // Extracting original values
             const originalStudyUID = this.getTagValue(dict, '0020000D');
+            const originalSeriesUID = this.getTagValue(dict, '0020000E');
+            const originalSOPInstanceUID = this.getTagValue(dict, '00080018');
             const originalAccession = this.getTagValue(dict, '00080050');
             const originalPatientID = this.getTagValue(dict, '00100020');
+            const originalPatientName = this.getTagValue(dict, '00100010');
+            const originalPatientAge = this.getTagValue(dict, '00101010');
+            const originalPatientBirthDate = this.getTagValue(dict, '00100030');
+            const originalStudyDate = this.getTagValue(dict, '00080020');
             // Original values extracted
             
             // Process tags in place - scramble and filter
@@ -453,6 +459,12 @@ class DicomProcessor {
                             let maxLength = this.getVRMaxLength(vr);
                             value = [await this.scrambler.scrambleText(value[0], maxLength)];
                             action = 'SCRAMBLE_TEXT';
+                        } else if (tag === '00101010') {
+                            // PatientAge — preserve the value but offset by -30 days
+                            // (~1 month younger) for pseudonymisation. Researchers can
+                            // still use the value; the absolute age is no longer exact.
+                            value = [this.scrambler.offsetAge(value[0], -30)];
+                            action = 'OFFSET_AGE_-30D';
                         }
                     }
                     
@@ -497,7 +509,17 @@ class DicomProcessor {
                             if (studySourceUID) {
                                 const vr = this.getVRForTag(tag);
                                 const maxLength = this.getVRMaxLength(vr);
-                                const generatedValue = await this.scrambler.scrambleFromStudyUID(studySourceUID, maxLength);
+                                // If notPresentValue is provided it acts as a static prefix; the
+                                // study-derived portion is then truncated to 8 chars so the result
+                                // is e.g. "PatientAB4CD8FG" rather than a 16+ char opaque string.
+                                const prefix = config.notPresentValue || '';
+                                const hashLength = prefix
+                                    ? Math.max(0, Math.min(8, maxLength - prefix.length))
+                                    : maxLength;
+                                const hashPortion = hashLength > 0
+                                    ? await this.scrambler.scrambleFromStudyUID(studySourceUID, hashLength)
+                                    : '';
+                                const generatedValue = (prefix + hashPortion).substr(0, maxLength);
                                 if (generatedValue) {
                                     if (!dict[tag]) {
                                         dict[tag] = { vr: vr, Value: [] };
@@ -542,17 +564,37 @@ class DicomProcessor {
             // Create audit trail entry
             // Creating audit trail entry
             const scrambledStudyUID = this.getTagValue(dict, '0020000D');
+            const scrambledSeriesUID = this.getTagValue(dict, '0020000E');
+            // SOPInstanceUID after scrambling — scrambledSOPInstanceUID was
+            // already computed above as the source of truth.
             const scrambledAccession = this.getTagValue(dict, '00080050');
             const scrambledPatientID = this.getTagValue(dict, '00100020');
-            
+            const scrambledPatientName = this.getTagValue(dict, '00100010');
+            const scrambledPatientAge = this.getTagValue(dict, '00101010');
+            const scrambledPatientBirthDate = this.getTagValue(dict, '00100030');
+            const scrambledStudyDate = this.getTagValue(dict, '00080020');
+
             this.auditTrail.push({
                 filename,
                 originalStudyUID: originalStudyUID || '',
                 scrambledStudyUID: scrambledStudyUID || '',
+                originalSeriesUID: originalSeriesUID || '',
+                scrambledSeriesUID: scrambledSeriesUID || '',
+                originalSOPInstanceUID: originalSOPInstanceUID || '',
+                scrambledSOPInstanceUID: scrambledSOPInstanceUID || '',
                 originalAccession: originalAccession || '',
                 scrambledAccession: scrambledAccession || '',
                 originalPatientID: originalPatientID || '',
-                scrambledPatientID: scrambledPatientID || ''
+                scrambledPatientID: scrambledPatientID || '',
+                originalPatientName: originalPatientName || '',
+                scrambledPatientName: scrambledPatientName || '',
+                originalPatientAge: originalPatientAge || '',
+                scrambledPatientAge: scrambledPatientAge || '',
+                ageOffsetDays: originalPatientAge ? -30 : '',
+                originalPatientBirthDate: originalPatientBirthDate || '',
+                scrambledPatientBirthDate: scrambledPatientBirthDate || '',
+                originalStudyDate: originalStudyDate || '',
+                scrambledStudyDate: scrambledStudyDate || ''
             });
             
             // Write the modified dataset back to buffer

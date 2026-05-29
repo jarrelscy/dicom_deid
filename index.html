@@ -27,23 +27,26 @@
                 <div class="form-group">
                     <label for="passphrase">Enter Passphrase:</label>
                     <input type="password" id="passphrase" placeholder="Enter secure passphrase" required>
-                    <small>This passphrase will be used to deterministically scramble sensitive data</small>
+                    <small>Using this passphrase will allow you to scramble this data the exact same way in future</small>
                 </div>
 
                 <div class="form-group">
                     <label class="checkbox-item">
-                        <input type="checkbox" id="verboseMode">
+                        <input type="checkbox" id="verboseMode" checked>
                         <span>Verbose Mode - Log detailed tag processing information</span>
                     </label>
                     <small>When enabled, the output.log will include detailed information about each DICOM tag and how it was processed</small>
                 </div>
 
                 <div class="mode-selector">
-                    <button id="zipModeBtn" class="mode-btn active">ZIP Mode</button>
-                    <button id="folderModeBtn" class="mode-btn">Folder Mode</button>
+                    <button id="zipModeBtn" class="mode-btn">ZIP Mode</button>
+                    <button id="folderModeBtn" class="mode-btn active">Folder Mode</button>
                 </div>
-                
-                <div id="zipMode" class="upload-mode">
+
+                <div id="zipMode" class="upload-mode" style="display: none;">
+                    <div class="zip-size-warning">
+                        <p><strong>Heads up:</strong> Do not use ZIP mode for any files over 1.5&nbsp;GB. Use Folder mode instead.</p>
+                    </div>
                     <div class="file-upload" id="fileUpload">
                         <div class="upload-area" id="uploadArea">
                             <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -58,7 +61,7 @@
                     </div>
                 </div>
                 
-                <div id="folderMode" class="upload-mode" style="display: none;">
+                <div id="folderMode" class="upload-mode">
                     <div class="folder-selection">
                         <div class="folder-item">
                             <svg class="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -100,7 +103,7 @@
                             <span>Digital X-Ray Image Storage - For Presentation</span>
                         </label>
                         <label class="checkbox-item">
-                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_1_1" checked>
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_1_1_1">
                             <span>Digital X-Ray Image Storage - For Processing</span>
                         </label>
                         <label class="checkbox-item">
@@ -124,11 +127,11 @@
                             <span>CT Image Storage</span>
                         </label>
                         <label class="checkbox-item">
-                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2_1" checked>
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2_1">
                             <span>Enhanced CT Image Storage</span>
                         </label>
                         <label class="checkbox-item">
-                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2_2" checked>
+                            <input type="checkbox" id="sopclass_1_2_840_10008_5_1_4_1_1_2_2">
                             <span>Legacy Converted Enhanced CT Image Storage</span>
                         </label>
                         <label class="checkbox-item">
@@ -166,22 +169,12 @@
                     </div>
                 </div>
 
-                <div class="action-buttons">
                 <button id="processBtn" class="process-btn" disabled>
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5,3 19,12 5,21 5,3"/>
                     </svg>
                     Process DICOM Files
                 </button>
-                <button id="decompressBtn" class="process-btn" disabled>
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 3v12"/>
-                        <polyline points="7,11 12,16 17,11"/>
-                        <rect x="4" y="17" width="16" height="4" rx="1"/>
-                    </svg>
-                    Decompress + Process DICOM Files
-                </button>
-                </div>
             </div>
 
             <div class="progress-section" id="progressSection" style="display: none;">
@@ -197,7 +190,6 @@
                 <button id="cancelBtn" class="cancel-btn" style="display: none;">
                     Cancel &amp; Save Audit
                 </button>
-                </div>
             </div>
 
             <div class="results-section" id="resultsSection" style="display: none;">

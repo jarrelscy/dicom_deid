@@ -22,7 +22,7 @@ class DicomDeidentifier {
         this.aborted = false;
 
         // File System Access API variables
-        this.processingMode = 'zip'; // 'zip' or 'folder'
+        this.processingMode = 'folder'; // 'zip' or 'folder'
         this.inputDirectoryHandle = null;
         this.outputDirectoryHandle = null;
         this.fileSystemSupported = 'showDirectoryPicker' in window;
@@ -38,11 +38,10 @@ class DicomDeidentifier {
         // Get DOM elements
         this.passphraseInput = document.getElementById('passphrase');
         this.verboseModeInput = document.getElementById('verboseMode');
-        this.verboseMode = false;
+        this.verboseMode = this.verboseModeInput.checked;
         this.uploadArea = document.getElementById('uploadArea');
         this.fileInput = document.getElementById('fileInput');
         this.processBtn = document.getElementById('processBtn');
-        this.decompressBtn = document.getElementById('decompressBtn');
         this.progressSection = document.getElementById('progressSection');
         this.progressFill = document.getElementById('progressFill');
         this.progressText = document.getElementById('progressText');
@@ -142,10 +141,6 @@ class DicomDeidentifier {
         // Process button
         this.processBtn.addEventListener('click', () => {
             this.decompressMode = false;
-            this.processFiles();
-        });
-        this.decompressBtn.addEventListener('click', () => {
-            this.decompressMode = true;
             this.processFiles();
         });
         
@@ -296,7 +291,6 @@ class DicomDeidentifier {
         }
         
         this.processBtn.disabled = !canProcess;
-        this.decompressBtn.disabled = !canProcess;
     }
     
     switchToMode(mode) {
@@ -779,31 +773,56 @@ class DicomDeidentifier {
             'Filename',
             'Original Study Instance UID',
             'Scrambled Study Instance UID',
+            'Original Series Instance UID',
+            'Scrambled Series Instance UID',
+            'Original SOP Instance UID',
+            'Scrambled SOP Instance UID',
             'Original Accession',
             'Scrambled Accession',
             'Original Patient ID',
-            'Scrambled Patient ID'
+            'Scrambled Patient ID',
+            'Original Patient Name',
+            'Scrambled Patient Name',
+            'Original Patient Age',
+            'Scrambled Patient Age',
+            'Age Offset (days)',
+            'Original Patient Birth Date',
+            'Scrambled Patient Birth Date',
+            'Original Study Date',
+            'Scrambled Study Date'
         ];
-        
+
         let csv = headers.join(',') + '\n';
-        
+
         // Combine all audit trails - include ALL entries (one per DICOM file)
         const allEntries = this.auditTrails.flat();
-        
-        // Add all entries (do not remove duplicates - each file should have a row)
+
         for (const entry of allEntries) {
             const row = [
                 this.escapeCSV(entry.filename),
                 this.escapeCSV(entry.originalStudyUID),
                 this.escapeCSV(entry.scrambledStudyUID),
+                this.escapeCSV(entry.originalSeriesUID),
+                this.escapeCSV(entry.scrambledSeriesUID),
+                this.escapeCSV(entry.originalSOPInstanceUID),
+                this.escapeCSV(entry.scrambledSOPInstanceUID),
                 this.escapeCSV(entry.originalAccession),
                 this.escapeCSV(entry.scrambledAccession),
                 this.escapeCSV(entry.originalPatientID),
-                this.escapeCSV(entry.scrambledPatientID)
+                this.escapeCSV(entry.scrambledPatientID),
+                this.escapeCSV(entry.originalPatientName),
+                this.escapeCSV(entry.scrambledPatientName),
+                this.escapeCSV(entry.originalPatientAge),
+                this.escapeCSV(entry.scrambledPatientAge),
+                this.escapeCSV(entry.ageOffsetDays),
+                this.escapeCSV(entry.originalPatientBirthDate),
+                this.escapeCSV(entry.scrambledPatientBirthDate),
+                this.escapeCSV(entry.originalStudyDate),
+                this.escapeCSV(entry.scrambledStudyDate)
             ];
             csv += row.join(',') + '\n';
         }
-        
+
         return csv;
     }
     
@@ -1306,17 +1325,18 @@ class DicomDeidentifier {
             '00080018': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'SOP Instance UID' },
             '00080050': { ifPresent: 'scramble', ifNotPresent: 'scrambleFromStudyUID', presentValue: '', notPresentValue: '', description: 'Accession Number' },
             '00100010': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'ANONYMOUS^PATIENT', description: 'Patient Name' },
-            '00100020': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'PATIENTID1', description: 'Patient ID' },
+            '00100020': { ifPresent: 'scramble', ifNotPresent: 'scrambleFromStudyUID', presentValue: '', notPresentValue: 'Patient', description: 'Patient ID' },
             '00100030': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: '19000101', description: 'Patient Birth Date' },
-            '00100040': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'M', description: 'Patient Sex' },
-            '00101010': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: '027Y', description: 'Patient Age' },
-            '00080020': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: '19270101', description: 'Study Date' },
+            '00100040': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'F', description: 'Patient Sex' },
+            '00101010': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Patient Age' },
+            '00080020': { ifPresent: 'scramble', ifNotPresent: 'replace', presentValue: '', notPresentValue: '20000101', description: 'Study Date' },
             '00080030': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Study Time' },
             '00080060': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Modality' },
             '00080070': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Manufacturer' },
             '00080080': { ifPresent: 'scramble', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Institution Name' },
-            '00081030': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'UNKNOWNSTUDY', description: 'Study Description' },
-            '0008103E': { ifPresent: 'unchanged', ifNotPresent: 'replace', presentValue: '', notPresentValue: 'UNKNOWNSTUDY', description: 'Series Description' },
+            '00081030': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Study Description' },
+            '0008103E': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Series Description' },
+            '00180015': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Body Part Examined' },
             '00200011': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Series Number' },
             '00200013': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Instance Number' },
             '00280010': { ifPresent: 'unchanged', ifNotPresent: 'unchanged', presentValue: '', notPresentValue: '', description: 'Rows' },
@@ -1366,9 +1386,9 @@ class DicomDeidentifier {
                             <option value="scrambleFromStudyUID" ${config.ifNotPresent === 'scrambleFromStudyUID' ? 'selected' : ''}>Generate from Study UID</option>
                             <option value="replace" ${config.ifNotPresent === 'replace' ? 'selected' : ''}>Add Value</option>
                         </select>
-                        <input type="text" class="replace-value" data-tag="${tag}" data-scenario="notpresent" 
-                               placeholder="Add value..." value="${config.notPresentValue}"
-                               ${config.ifNotPresent !== 'replace' ? 'style="display:none"' : ''}>
+                        <input type="text" class="replace-value" data-tag="${tag}" data-scenario="notpresent"
+                               placeholder="${config.ifNotPresent === 'scrambleFromStudyUID' ? 'Optional prefix…' : 'Add value...'}" value="${config.notPresentValue}"
+                               ${(config.ifNotPresent !== 'replace' && config.ifNotPresent !== 'scrambleFromStudyUID') ? 'style="display:none"' : ''}>
                     </div>
                 </div>
             `;
@@ -1395,10 +1415,12 @@ class DicomDeidentifier {
                     this.tagConfigurations[tag].ifNotPresent = value;
                 }
                 
-                // Show/hide replace value input
+                // Show/hide replace value input — also visible for scrambleFromStudyUID
+                // (where it acts as an optional static prefix, e.g. "Patient" → "PatientAB4CD8FG")
                 const replaceInput = e.target.parentElement.querySelector('.replace-value');
-                if (value === 'replace') {
+                if (value === 'replace' || value === 'scrambleFromStudyUID') {
                     replaceInput.style.display = 'block';
+                    replaceInput.placeholder = value === 'scrambleFromStudyUID' ? 'Optional prefix…' : 'Add value...';
                 } else {
                     replaceInput.style.display = 'none';
                 }
