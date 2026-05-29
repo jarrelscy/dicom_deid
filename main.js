@@ -773,31 +773,56 @@ class DicomDeidentifier {
             'Filename',
             'Original Study Instance UID',
             'Scrambled Study Instance UID',
+            'Original Series Instance UID',
+            'Scrambled Series Instance UID',
+            'Original SOP Instance UID',
+            'Scrambled SOP Instance UID',
             'Original Accession',
             'Scrambled Accession',
             'Original Patient ID',
-            'Scrambled Patient ID'
+            'Scrambled Patient ID',
+            'Original Patient Name',
+            'Scrambled Patient Name',
+            'Original Patient Age',
+            'Scrambled Patient Age',
+            'Age Offset (days)',
+            'Original Patient Birth Date',
+            'Scrambled Patient Birth Date',
+            'Original Study Date',
+            'Scrambled Study Date'
         ];
-        
+
         let csv = headers.join(',') + '\n';
-        
+
         // Combine all audit trails - include ALL entries (one per DICOM file)
         const allEntries = this.auditTrails.flat();
-        
-        // Add all entries (do not remove duplicates - each file should have a row)
+
         for (const entry of allEntries) {
             const row = [
                 this.escapeCSV(entry.filename),
                 this.escapeCSV(entry.originalStudyUID),
                 this.escapeCSV(entry.scrambledStudyUID),
+                this.escapeCSV(entry.originalSeriesUID),
+                this.escapeCSV(entry.scrambledSeriesUID),
+                this.escapeCSV(entry.originalSOPInstanceUID),
+                this.escapeCSV(entry.scrambledSOPInstanceUID),
                 this.escapeCSV(entry.originalAccession),
                 this.escapeCSV(entry.scrambledAccession),
                 this.escapeCSV(entry.originalPatientID),
-                this.escapeCSV(entry.scrambledPatientID)
+                this.escapeCSV(entry.scrambledPatientID),
+                this.escapeCSV(entry.originalPatientName),
+                this.escapeCSV(entry.scrambledPatientName),
+                this.escapeCSV(entry.originalPatientAge),
+                this.escapeCSV(entry.scrambledPatientAge),
+                this.escapeCSV(entry.ageOffsetDays),
+                this.escapeCSV(entry.originalPatientBirthDate),
+                this.escapeCSV(entry.scrambledPatientBirthDate),
+                this.escapeCSV(entry.originalStudyDate),
+                this.escapeCSV(entry.scrambledStudyDate)
             ];
             csv += row.join(',') + '\n';
         }
-        
+
         return csv;
     }
     

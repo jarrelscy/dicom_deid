@@ -152,6 +152,25 @@ class DicomScrambler {
     }
 
     /**
+     * Offset a DICOM Age String (AS, format NNNS where S in D|W|M|Y) by a
+     * number of days. Used to pseudonymise PatientAge while preserving the
+     * order-of-magnitude useful for research. Returns input unchanged if the
+     * value isn't a valid AS.
+     */
+    offsetAge(asValue, deltaDays) {
+        if (!asValue || asValue.length !== 4) return asValue;
+        const numStr = asValue.substring(0, 3);
+        const suffix = asValue.substring(3, 4);
+        if (!/^\d{3}$/.test(numStr)) return asValue;
+        const unitDays = { D: 1, W: 7, M: 30, Y: 365 }[suffix];
+        if (!unitDays) return asValue;
+        const num = parseInt(numStr, 10);
+        const totalDays = Math.max(0, num * unitDays + deltaDays);
+        const newNum = Math.floor(totalDays / unitDays);
+        return String(Math.min(newNum, 999)).padStart(3, '0') + suffix;
+    }
+
+    /**
      * Scramble DICOM time (HHMMSS format)
      */
     async scrambleTime(input) {
