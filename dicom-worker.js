@@ -103,8 +103,12 @@ const WHITELISTED_TAGS = {
 
 // Tags that need scrambling
 const SCRAMBLE_UID_TAGS = ['00020003', '0020000D', '0020000E', '00080018'];
-const SCRAMBLE_DATE_TAGS = ['00080020', '00080021', '00080022', '00080023', '00100030'];
-const SCRAMBLE_TIME_TAGS = ['00080030', '00080031', '00080032', '00080033'];
+// StudyDate (00080020) and StudyTime (00080030) deliberately omitted —
+// research consumers usually need the real study chronology preserved.
+// Acquisition / content / series dates and times are still scrambled per
+// patient-keyed offset.
+const SCRAMBLE_DATE_TAGS = ['00080021', '00080022', '00080023', '00100030'];
+const SCRAMBLE_TIME_TAGS = ['00080031', '00080032', '00080033'];
 const SCRAMBLE_TEXT_TAGS = ['00080050', '00100010', '00100020', '00080080'];
 
 class DicomProcessor {
