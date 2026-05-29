@@ -120,25 +120,33 @@ class DicomScrambler {
      */
     async scrambleDate(input, key = null) {
         if (!input || input.length !== 8) return input;
-        
+
+        // Reject inputs that aren't all digits (e.g. "abcd1234") and inputs
+        // whose digits don't form a real calendar date. Previously these slipped
+        // through and produced "0NaNNaNN" because parseInt() returned NaN.
+        if (!/^\d{8}$/.test(input)) return input;
+        const year = parseInt(input.substr(0, 4), 10);
+        const month = parseInt(input.substr(4, 2), 10);
+        const day = parseInt(input.substr(6, 2), 10);
+        const originalDate = new Date(year, month - 1, day);
+        if (isNaN(originalDate.getTime())
+            || originalDate.getFullYear() !== year
+            || originalDate.getMonth() !== month - 1
+            || originalDate.getDate() !== day) {
+            return input;
+        }
+
         const hash = await this.generateHash(((key || 'global') + 'date_offset'));
         const numeric = this.hashToNumeric(hash);
-        
         const offsetDays = numeric % (365 * 20);
-        
-        const year = parseInt(input.substr(0, 4));
-        const month = parseInt(input.substr(4, 2));
-        const day = parseInt(input.substr(6, 2));
-        
-        const originalDate = new Date(year, month - 1, day);
-        
+
         const scrambledDate = new Date(originalDate);
         scrambledDate.setDate(scrambledDate.getDate() + offsetDays);
-        
+
         const scrambledYear = scrambledDate.getFullYear().toString().padStart(4, '0');
         const scrambledMonth = (scrambledDate.getMonth() + 1).toString().padStart(2, '0');
         const scrambledDay = scrambledDate.getDate().toString().padStart(2, '0');
-        
+
         const result = scrambledYear + scrambledMonth + scrambledDay;
         return result.substr(0, 8);
     }
